@@ -2,10 +2,19 @@ name: Hunter Scan
 
 on:
   workflow_dispatch:
+    inputs:
+      since:
+        description: "ISO-8601 timestamp to scan from"
+        required: false
+        default: ""
+  schedule:
+    - cron: "0 6 * * *"
 
 jobs:
   scan:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout
@@ -24,8 +33,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          SINCE="${{ inputs.since }}"
+          if [ -z "$SINCE" ]; then
+            SINCE=$(date -u -d '24 hours ago' --iso-8601=seconds)
+          fi
           npx tsx src/hunter/run.ts \
-            --since "$(date -u -d '24 hours ago' --iso-8601=seconds)" \
+            --since "$SINCE" \
             --ecosystem NPM \
             --output hunter-matches.json
 
