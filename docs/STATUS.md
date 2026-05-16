@@ -67,8 +67,26 @@ Slice 4 complete: lockfile parsing and advisory matching with 15 new tests passi
 
 ---
 
+---
+
+## Slice 5 — Hunter entry point + first GitHub Actions workflow
+
+**Status:** Complete
+
+Slice 5 complete: end-to-end Hunter CLI + `workflow_dispatch` GitHub Actions workflow.
+
+- Implemented `runHunter(opts, fetcher?)` in `src/hunter/run.ts` — fetches advisories, loads installed versions, matches, writes `MatchedThreat[]` JSON (2-space indent) to `outputPath`, returns `{ matchCount }`
+- Advisory-fetcher injection follows the same optional-last-param pattern as `fetchRecentAdvisories`, keeping GITHUB_TOKEN and network I/O out of tests
+- Thin CLI wrapper at the bottom of `run.ts` uses `node:util`'s `parseArgs`; required: `--output`; optional with sensible defaults: `--since` (24 h ago), `--ecosystem` (NPM), `--package-json` (./package.json), `--lockfile` (./package-lock.json)
+- ESM direct-execution guard uses `process.argv[1] === fileURLToPath(import.meta.url)` so importing `runHunter` in tests never triggers CLI side effects
+- Created `.github/workflows/hunter-scan.yml` with `workflow_dispatch` trigger: checkout → setup Node 20 + npm cache → `npm ci` → run Hunter → upload `hunter-matches.json` artifact → write match count to `$GITHUB_STEP_SUMMARY`
+- 4 new tests in `tests/run.test.ts` covering: match count + written content (vulnerable fixture), JSON round-trip validity, deterministic sort order, and empty-array output (clean fixture)
+- 61 total tests passing
+
+---
+
 ## Upcoming
 
-### Slice 5 — Hunter entry point + first GitHub Actions workflow
+### Slice 6 — Checkov wrapper
 
-Goal: end-to-end Hunter run on cron, producing a `matches.json` artifact.
+Goal: Checkov wrapper that runs against a Terraform directory and returns typed findings.

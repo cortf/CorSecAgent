@@ -1,0 +1,42 @@
+name: Hunter Scan
+
+on:
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Hunter
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx tsx src/hunter/run.ts \
+            --since "$(date -u -d '24 hours ago' --iso-8601=seconds)" \
+            --ecosystem NPM \
+            --output hunter-matches.json
+
+      - name: Upload scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: hunter-matches
+          path: hunter-matches.json
+
+      - name: Write step summary
+        run: |
+          COUNT=$(jq length hunter-matches.json)
+          echo "## Hunter Scan Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "Found **${COUNT}** vulnerable dependencies" >> "$GITHUB_STEP_SUMMARY"
