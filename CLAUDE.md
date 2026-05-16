@@ -34,15 +34,18 @@ See `docs/STATUS.md` for what's built and what's next.
 
 ## Testing conventions
 
-All tests live in `tests/` and are named `<module>.test.ts`. The template is
-`tests/semverRange.test.ts` — every new test file should follow the same shape.
+All tests live in `tests/` and are named `<module>.test.ts`. Two canonical
+templates exist — pick the one that fits the module under test:
 
-**Imports:** named imports from vitest (`describe`, `it`, `expect`); source
-imported with the `.js` extension (required for NodeNext ESM):
+- Pure functions with no I/O: `tests/semverRange.test.ts`
+- Modules with external I/O (network, filesystem): `tests/fetchAdvisories.test.ts`
+
+**Imports:** named imports from vitest (`describe`, `it`, `expect`, `vi` when
+mocking); source imported with the `.js` extension (required for NodeNext ESM):
 
 ```ts
-import { describe, it, expect } from 'vitest';
-import { myFn } from '../src/shared/myModule.js';
+import { describe, it, expect, vi } from 'vitest';
+import { myFn } from '../src/hunter/myModule.js';
 ```
 
 **`describe` block structure:** one block per logical concern, not one block per
@@ -53,7 +56,7 @@ describe('myFn — simple cases', …)
 describe('myFn — compound / edge cases', …)
 describe('myFn — invalid input (should return false, not throw)', …)
 describe('myFn — invalid config (should throw)', …)
-describe('Real-world fixture — <source>', …)   // e.g. a GitHub Advisory
+describe('<Source> fixture — <identifier>', …)   // e.g. a GitHub Advisory ID
 ```
 
 **`it` strings:** full English sentences stating what should happen, including
@@ -62,9 +65,30 @@ bound)", "(semver default)", etc.). No "should" prefix — write in present tens
 `'matches a version below the upper bound'`.
 
 **Fixtures:** real-world data (advisory ranges, lockfile snippets, API payloads)
-goes in a `describe` block labelled `'<Source> fixture — <identifier>'`. For
-file-based fixtures, load from `fixtures/`. For inline fixtures (short strings),
-declare a `const` inside the describe block.
+goes in a `describe` block labelled `'<Source> fixture — <identifier>'`. Load
+file-based fixtures at module level using the ESM-safe pattern:
+
+```ts
+const raw = JSON.parse(
+  readFileSync(new URL('../fixtures/my-fixture.json', import.meta.url), 'utf-8'),
+) as ExpectedShape;
+```
+
+For inline fixtures (short strings), declare a `const` inside the `describe`
+block. Never inline large payloads.
+
+**Mocking external clients:** inject the client as an optional last parameter on
+the function under test — do not use `vi.mock()` at the module level. Define a
+small factory at the top of the test file to reduce repetition:
+
+```ts
+function makeClient(response: unknown) {
+  return vi.fn().mockResolvedValue(response);
+}
+```
+
+This keeps auth and network concerns out of tests without coupling the test to
+module internals.
 
 **Error-path tests:** always assert both that the right wrapper type is thrown
 (`toThrow(/pattern/)`) and that the error message contains the offending input.

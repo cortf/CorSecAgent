@@ -1,0 +1,7 @@
+{
+  "name": "vulnerable-project",
+  "version": "1.0.0",
+  "devDependencies": {
+    "wrangler": "^3.10.0"
+  }
+}

@@ -19,3 +19,5 @@ Vitest provides Jest-compatible APIs with native ESM and TypeScript support with
 ---
 
 <!-- Add new ADRs above this line -->
+
+2026-05-16: Advisory.cvss is nullable because GitHub's API can omit it. Reporter must handle null gracefully — likely fall back to severity (LOW/MODERATE/HIGH/CRITICAL) as the urgency signal when CVSS is absent.
