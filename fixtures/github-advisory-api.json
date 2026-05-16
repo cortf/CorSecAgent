@@ -1,0 +1,426 @@
+{
+  "data": {
+    "securityAdvisories": {
+      "pageInfo": {
+        "hasNextPage": true,
+        "endCursor": "Y3Vyc29yOnYyOpK5MjAyNC0wMS0wM1QxNTo0Njo0Ni0wNjowMM4AA4Lx"
+      },
+      "nodes": [
+        {
+          "ghsaId": "GHSA-cfph-4qqh-w828",
+          "summary": "Arbitrary remote file read in Wrangler dev server",
+          "description": "### Impact\nSending specially crafted HTTP requests and inspector messages to Wrangler's dev server could result in any file on the user's computer being accessible over the local network. An attacker that could trick any user on the local network into opening a malicious website could also read any file.\n\n### Patches\nThis issue was fixed in `wrangler@3.19.0`. Wrangler will now only serve files that are part of your bundle, or referenced by your bundle's source maps.\n\n### Workarounds\nConfigure Wrangler to listen on local interfaces instead with `wrangler dev --ip 127.0.0.1`. This is the [default as of `wrangler@3.16.0`](https://github.com/cloudflare/workers-sdk/security/advisories/GHSA-f8mp-x433-5wpf), and removes the local network as an attack vector, but does not prevent an attack from visiting a malicious website.\n\n### References\n- https://github.com/cloudflare/workers-sdk/pull/4532\n- https://github.com/cloudflare/workers-sdk/pull/4535\n",
+          "severity": "MODERATE",
+          "publishedAt": "2024-01-03T21:24:56Z",
+          "updatedAt": "2024-01-03T21:24:57Z",
+          "withdrawnAt": null,
+          "identifiers": [
+            {
+              "type": "GHSA",
+              "value": "GHSA-cfph-4qqh-w828"
+            },
+            {
+              "type": "CVE",
+              "value": "CVE-2023-7079"
+            }
+          ],
+          "references": [
+            {
+              "url": "https://github.com/cloudflare/workers-sdk/security/advisories/GHSA-cfph-4qqh-w828"
+            },
+            {
+              "url": "https://nvd.nist.gov/vuln/detail/CVE-2023-7079"
+            },
+            {
+              "url": "https://github.com/cloudflare/workers-sdk/pull/4532"
+            },
+            {
+              "url": "https://github.com/cloudflare/workers-sdk/pull/4535"
+            },
+            {
+              "url": "https://github.com/cloudflare/workers-sdk/commit/29df8e17545bf3926b6d61678b596be809d40c6d"
+            },
+            {
+              "url": "https://github.com/cloudflare/workers-sdk/commit/311ffbd5064f8301ac6f0311bbe5630897923b93"
+            },
+            {
+              "url": "https://github.com/advisories/GHSA-cfph-4qqh-w828"
+            }
+          ],
+          "vulnerabilities": {
+            "nodes": [
+              {
+                "package": {
+                  "name": "wrangler",
+                  "ecosystem": "NPM"
+                },
+                "severity": "MODERATE",
+                "vulnerableVersionRange": ">= 3.9.0, < 3.19.0",
+                "firstPatchedVersion": {
+                  "identifier": "3.19.0"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "ghsaId": "GHSA-f8mp-x433-5wpf",
+          "summary": "Arbitrary remote code execution within `wrangler dev` Workers sandbox",
+          "description": "### Impact\nThe V8 inspector intentionally allows arbitrary code execution within the Workers sandbox for debugging. `wrangler dev` would previously start an inspector server listening on all network interfaces. This would allow an attacker on the local network to connect to the inspector and run arbitrary code. Additionally, the inspector server did not validate `Origin`/`Host` headers, granting an attacker that can trick any user on the local network into opening a malicious website the ability to run code. If `wrangler dev --remote` was being used, an attacker could access production resources if they were bound to the worker.\n\n### Patches\nThis issue was fixed in `wrangler@3.19.0` and `wrangler@2.20.2`. Whilst `wrangler dev`'s inspector server listens on local interfaces by default as of `wrangler@3.16.0`, an [SSRF vulnerability in `miniflare`](https://github.com/cloudflare/workers-sdk/security/advisories/GHSA-fwvg-2739-22v7) allowed access from the local network until `wrangler@3.18.0`. `wrangler@3.19.0` and `wrangler@2.20.2` introduced validation for the `Origin`/`Host` headers.\n\n### Workarounds\nUnfortunately, Wrangler doesn't provide any configuration for which host that inspector server should listen on. Please upgrade to at least `wrangler@3.16.0`, and configure Wrangler to listen on local interfaces instead with `wrangler dev --ip 127.0.0.1` to prevent SSRF. This removes the local network as an attack vector, but does not prevent an attack from visiting a malicious website.\n\n### References\n- https://github.com/cloudflare/workers-sdk/issues/4430\n- https://github.com/cloudflare/workers-sdk/pull/4437\n- https://github.com/cloudflare/workers-sdk/pull/4535\n- https://github.com/cloudflare/workers-sdk/pull/4550\n",
+          "severity": "CRITICAL",
+          "publishedAt": "2024-01-03T21:26:50Z",
+          "updatedAt": "2024-01-03T21:26:51Z",
+          "withdrawnAt": null,
+          "identifiers": [
+            {
+              "type": "GHSA",
+              "value": "GHSA-f8mp-x433-5wpf"
+            },
+            {
+              "type": "CVE",
+              "value": "CVE-2023-7080"
+            }
+          ],
+          "references": [
+            {
+              "url": "https://github.com/cloudflare/workers-sdk/security/advisories/GHSA-f8mp-x433-5wpf"
+            },
+            {
+              "url": "https://nvd.nist.gov/vuln/detail/CVE-2023-7080"
+            },
+            {
+              "url": "https://github.com/cloudflare/workers-sdk/issues/4430"
+            },
+            {
+              "url": "https://github.com/cloudflare/workers-sdk/pull/4437"
+            },
+            {
+              "url": "https://github.com/cloudflare/workers-sdk/pull/4535"
+            },
+            {
+              "url": "https://github.com/cloudflare/workers-sdk/pull/4550"
+            },
+            {
+              "url": "https://github.com/cloudflare/workers-sdk/commit/05b1bbd2f5b8e60268e30c276067c3a3ae1239cf"
+            },
+            {
+              "url": "https://github.com/cloudflare/workers-sdk/commit/29df8e17545bf3926b6d61678b596be809d40c6d"
+            },
+            {
+              "url": "https://github.com/cloudflare/workers-sdk/commit/49a469601adaa9eb9e1f2d6de197c1979d5c6c1b"
+            },
+            {
+              "url": "https://github.com/cloudflare/workers-sdk/commit/63708a94fb7a055bf15fa963f2d598b47b11d3c0"
+            },
+            {
+              "url": "https://github.com/advisories/GHSA-f8mp-x433-5wpf"
+            }
+          ],
+          "vulnerabilities": {
+            "nodes": [
+              {
+                "package": {
+                  "name": "wrangler",
+                  "ecosystem": "NPM"
+                },
+                "severity": "CRITICAL",
+                "vulnerableVersionRange": ">= 2.0.0, < 2.20.2",
+                "firstPatchedVersion": {
+                  "identifier": "2.20.2"
+                }
+              },
+              {
+                "package": {
+                  "name": "wrangler",
+                  "ecosystem": "NPM"
+                },
+                "severity": "CRITICAL",
+                "vulnerableVersionRange": ">= 3.0.0, < 3.19.0",
+                "firstPatchedVersion": {
+                  "identifier": "3.19.0"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "ghsaId": "GHSA-hw4x-mcx5-9q36",
+          "summary": "Withdrawn Advisory: Teleport Proxy and Teleport Agents: SSRF to arbitrary hosts is possible from low privileged users",
+          "description": "## Withdrawn Advisory\nThis advisory has been withdrawn because the vulnerability affects a binary, not a library in a [supported ecosystem](https://github.com/github/advisory-database#supported-ecosystems). Therefore, users of the library should not receive alerts. This link is maintained to preserve external references.\n\n## Original Description\n\n### Impact\nAn authenticated attacker with valid credentials (user or host) can make non-blind Server-Side Request Forgery (SSRF) through the proxy and/or agents to arbitrary hosts.\n\nDuring investigation of this functionality, it was discovered that there are several permutations where this SSRF is possible. This release addresses all but one: a root proxy administrator with access to the root proxy credentials can make requests through leaf proxies in Trusted Clusters. This behavior will be restricted in future releases. For customers using Teleport in a Trusted Cluster configuration, we encourage leaf clusters to have network restrictions in place to mitigate SSRF. For example, we recommend restricting outbound network connections to only the Auth Service, your SSO provider, and any agents, databases or applications needed to be accessed from the proxy. If running in a cloud environment pay careful attention to what cloud resources are accessible from the proxy.\n\n### Patches\nFixed in versions 14.2.4, 13.4.13 and 12.4.31.\n\n### Workarounds\nStrict network controls from the Teleport Proxy and Teleport Agents reduce the potential exposure from this issue.\n\n### References\n* Fixed in PR: https://github.com/gravitational/teleport/pull/36127\n* https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html#network-layer\n* https://www.cyber.gov.au/resources-business-and-government/maintaining-devices-and-systems/system-hardening-and-administration/network-hardening/implementing-network-segmentation-and-segregation\n",
+          "severity": "CRITICAL",
+          "publishedAt": "2024-01-03T21:28:37Z",
+          "updatedAt": "2024-07-08T19:39:16Z",
+          "withdrawnAt": "2024-01-23T12:50:39Z",
+          "identifiers": [
+            {
+              "type": "GHSA",
+              "value": "GHSA-hw4x-mcx5-9q36"
+            }
+          ],
+          "references": [
+            {
+              "url": "https://github.com/gravitational/teleport/security/advisories/GHSA-hw4x-mcx5-9q36"
+            },
+            {
+              "url": "https://github.com/gravitational/teleport/pull/36127"
+            },
+            {
+              "url": "https://github.com/gravitational/teleport/commit/bb2d67d357e868254a21ed7cb132030d7bf9fcbc"
+            },
+            {
+              "url": "https://github.com/advisories/GHSA-hw4x-mcx5-9q36"
+            }
+          ],
+          "vulnerabilities": {
+            "nodes": []
+          }
+        },
+        {
+          "ghsaId": "GHSA-76cc-p55w-63g3",
+          "summary": "Withdrawn Advisory: Teleport Access List owners can escalate their privileges",
+          "description": "## Withdrawn Advisory\nThis advisory has been withdrawn because the vulnerability affects a binary, not a library in a [supported ecosystem](https://github.com/github/advisory-database#supported-ecosystems). Therefore, users of the library should not receive alerts. This link is maintained to preserve external references.\n\n## Original Description\n\n### Impact\nAccess Lists are a new feature introduced in Teleport 14 and currently under preview. An issue was discovered that allows an Access List Owner to assign arbitrary permissions, including permissions to themselves which could result in privilege escalation.\n\n### Patches\nFixed in version 14.2.4 and 13.4.13",
+          "severity": "CRITICAL",
+          "publishedAt": "2024-01-03T21:29:09Z",
+          "updatedAt": "2024-07-08T19:39:41Z",
+          "withdrawnAt": "2024-01-23T12:50:23Z",
+          "identifiers": [
+            {
+              "type": "GHSA",
+              "value": "GHSA-76cc-p55w-63g3"
+            }
+          ],
+          "references": [
+            {
+              "url": "https://github.com/gravitational/teleport/security/advisories/GHSA-76cc-p55w-63g3"
+            },
+            {
+              "url": "https://github.com/advisories/GHSA-76cc-p55w-63g3"
+            }
+          ],
+          "vulnerabilities": {
+            "nodes": []
+          }
+        },
+        {
+          "ghsaId": "GHSA-c9v7-wmwj-vf6x",
+          "summary": "Withdrawn Advisory: SFTP is possible on the Proxy server for any user with SFTP access",
+          "description": "## Withdrawn Advisory\nThis advisory has been withdrawn because the vulnerability affects a binary, not a library in a [supported ecosystem](https://github.com/github/advisory-database#supported-ecosystems). Therefore, users of the library should not receive alerts. This link is maintained to preserve external references.\n\n## Original Description\n\n### Impact\nAn attacker that has access to nodes within the cluster may be able to SFTP to the Proxy Service. The user's permissions on the Proxy server are still respected, so files can only be read or modified on the Proxy if the user has system access to read or write to them.\n\n### Patches\nFixed in versions 14.2.4, 13.4.13 and 12.4.31.\n\n### Workarounds\nThis issue can be mitigated by ensuring that regular users do not have a valid principal on the proxy server. To be exploitable, the user's login must exist on a proxy server and the Teleport binary must have permissions to start a session with this user.\n\n### References\n* Fix PR: https://github.com/gravitational/teleport/pull/36136\n",
+          "severity": "HIGH",
+          "publishedAt": "2024-01-03T21:29:33Z",
+          "updatedAt": "2024-07-08T19:40:00Z",
+          "withdrawnAt": "2024-01-23T12:50:08Z",
+          "identifiers": [
+            {
+              "type": "GHSA",
+              "value": "GHSA-c9v7-wmwj-vf6x"
+            }
+          ],
+          "references": [
+            {
+              "url": "https://github.com/gravitational/teleport/security/advisories/GHSA-c9v7-wmwj-vf6x"
+            },
+            {
+              "url": "https://github.com/gravitational/teleport/pull/36136"
+            },
+            {
+              "url": "https://github.com/gravitational/teleport/commit/1c77fc49944ebcded32bbdd77c3e1f4f8a1c130d"
+            },
+            {
+              "url": "https://github.com/advisories/GHSA-c9v7-wmwj-vf6x"
+            }
+          ],
+          "vulnerabilities": {
+            "nodes": []
+          }
+        },
+        {
+          "ghsaId": "GHSA-vfxf-76hv-v4w4",
+          "summary": "Withdrawn Advisory: User-provided environment values allow execution on macOS agents",
+          "description": "## Withdrawn Advisory\nThis advisory has been withdrawn because the vulnerability affects a binary, not a library in a [supported ecosystem](https://github.com/github/advisory-database#supported-ecosystems). Therefore, users of the library should not receive alerts. This link is maintained to preserve external references.\n\n## Original Description\n\n### Impact\nAgents running on macOS could be susceptible to unexpected code execution through user supplied environment variables.\n\n### Patches\nFixed in versions 14.2.4, 13.4.13 and 12.4.31.\n\n### References\n* Fix PR: https://github.com/gravitational/teleport/pull/36132\n",
+          "severity": "HIGH",
+          "publishedAt": "2024-01-03T21:30:17Z",
+          "updatedAt": "2024-07-08T19:40:24Z",
+          "withdrawnAt": "2024-01-23T12:49:53Z",
+          "identifiers": [
+            {
+              "type": "GHSA",
+              "value": "GHSA-vfxf-76hv-v4w4"
+            }
+          ],
+          "references": [
+            {
+              "url": "https://github.com/gravitational/teleport/security/advisories/GHSA-vfxf-76hv-v4w4"
+            },
+            {
+              "url": "https://github.com/gravitational/teleport/pull/36132"
+            },
+            {
+              "url": "https://github.com/gravitational/teleport/commit/fcc97de9f99dfec8696ecfd620672a26f29cf9ac"
+            },
+            {
+              "url": "https://github.com/advisories/GHSA-vfxf-76hv-v4w4"
+            }
+          ],
+          "vulnerabilities": {
+            "nodes": []
+          }
+        },
+        {
+          "ghsaId": "GHSA-p4v8-jgcv-9g75",
+          "summary": "safe_pqc_kyber leaks parts of secret keys",
+          "description": "### Impact\nOn some platforms, when an attacker can time decapsulation, and in particular when the attacker can forge cipher texts, they can learn (parts of) the secret key.\n\nDoes not apply to ephemeral usage, such as when used in the regular way in TLS.\n\n### Patches\nPatched in 0.6.2.\n\n\n### References\n- [kyberslash.cr.yp.to](https://kyberslash.cr.yp.to)",
+          "severity": "HIGH",
+          "publishedAt": "2024-01-03T21:40:45Z",
+          "updatedAt": "2024-01-03T21:40:47Z",
+          "withdrawnAt": null,
+          "identifiers": [
+            {
+              "type": "GHSA",
+              "value": "GHSA-p4v8-jgcv-9g75"
+            }
+          ],
+          "references": [
+            {
+              "url": "https://github.com/bwesterb/argyle-kyber/security/advisories/GHSA-p4v8-jgcv-9g75"
+            },
+            {
+              "url": "https://github.com/bwesterb/argyle-kyber/commit/b5c6ad13f4eece80e59c6ebeafd787ba1519f5f6"
+            },
+            {
+              "url": "https://kyberslash.cr.yp.to/"
+            },
+            {
+              "url": "https://github.com/advisories/GHSA-p4v8-jgcv-9g75"
+            }
+          ],
+          "vulnerabilities": {
+            "nodes": []
+          }
+        },
+        {
+          "ghsaId": "GHSA-xgpm-q3mq-46rq",
+          "summary": "PrestaShop some attribute not escaped in Validate::isCleanHTML method",
+          "description": "### Description\nSome event attributes are not detected by the isCleanHTML method\n\n### Impact\nSome modules using the isCleanHTML method could be vulnerable to xss\n\n### Patches\n8.1.3, 1.7.8.11\n\n### Workarounds\nThe best workaround is to use the `HTMLPurifier` library to sanitize html input coming from users. The library is already available as a dependency in the PrestaShop project. Beware though that in legacy object models, fields of `HTML` type will call `isCleanHTML`.\n\n### Reporters\n\nReported by Antonio Russo (@Antonio-R1 on GitHub) and Antonio Rocco Spataro (@antoniospataro on GitHub).\n\n",
+          "severity": "HIGH",
+          "publishedAt": "2024-01-03T21:41:14Z",
+          "updatedAt": "2024-01-08T22:13:49Z",
+          "withdrawnAt": null,
+          "identifiers": [
+            {
+              "type": "GHSA",
+              "value": "GHSA-xgpm-q3mq-46rq"
+            },
+            {
+              "type": "CVE",
+              "value": "CVE-2024-21627"
+            }
+          ],
+          "references": [
+            {
+              "url": "https://github.com/PrestaShop/PrestaShop/security/advisories/GHSA-xgpm-q3mq-46rq"
+            },
+            {
+              "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-21627"
+            },
+            {
+              "url": "https://github.com/PrestaShop/PrestaShop/commit/0ed1af8de500538490f88e9e794e2e8113fb8df7"
+            },
+            {
+              "url": "https://github.com/PrestaShop/PrestaShop/commit/73cfb44666818eefd501b526a894fe884dd12129"
+            },
+            {
+              "url": "https://github.com/PrestaShop/PrestaShop/commit/ba06d18466df5b92cb841d504cc7210121104883"
+            },
+            {
+              "url": "https://github.com/PrestaShop/PrestaShop/commit/f799dcff564cd1b7ead932ffc3343b675107dbce"
+            },
+            {
+              "url": "https://github.com/advisories/GHSA-xgpm-q3mq-46rq"
+            }
+          ],
+          "vulnerabilities": {
+            "nodes": []
+          }
+        },
+        {
+          "ghsaId": "GHSA-r6r4-5pr8-gjcp",
+          "summary": "Vapor contains an integer overflow in URI leading to potential host spoofing",
+          "description": "Vapor's `vapor_urlparser_parse` function uses `uint16_t` indexes when parsing a URI's components, which may cause integer overflows when parsing untrusted inputs.\n\nThis vulnerability does not affect Vapor directly but could impact applications relying on the URI type for validating user input. \n\nThe URI type is used in several places in Vapor. A developer may decide to use URI to represent a URL in their application (especially if that URL is then passed to the HTTP Client) and rely on its public properties and methods. However, URI may fail to properly parse a valid (albeit abnormally long) URL, due to string ranges being converted to 16-bit integers. An attacker may use this behaviour to trick the application into accepting a URL to an untrusted destination.\n\nBy padding the port number with zeros, an attacker can cause an integer overflow to occur when the URL authority is parsed and, as a result, spoof the host.\n\n### Impact\nUsers attempting to treat untrusted input as a URI are vulnerable to a host spoofing attack due to an integer overflow.\n\n### Workarounds\nValidate user input before parsing as a URI or, if possible, use Foundation's `URL` and `URLComponents` utilities.",
+          "severity": "MODERATE",
+          "publishedAt": "2024-01-03T21:44:35Z",
+          "updatedAt": "2024-02-09T00:29:15Z",
+          "withdrawnAt": null,
+          "identifiers": [
+            {
+              "type": "GHSA",
+              "value": "GHSA-r6r4-5pr8-gjcp"
+            },
+            {
+              "type": "CVE",
+              "value": "CVE-2024-21631"
+            }
+          ],
+          "references": [
+            {
+              "url": "https://github.com/vapor/vapor/security/advisories/GHSA-r6r4-5pr8-gjcp"
+            },
+            {
+              "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-21631"
+            },
+            {
+              "url": "https://github.com/vapor/vapor/commit/6db3d917b5ce5024a84eb265ef65691383305d70"
+            },
+            {
+              "url": "https://github.com/advisories/GHSA-r6r4-5pr8-gjcp"
+            }
+          ],
+          "vulnerabilities": {
+            "nodes": []
+          }
+        },
+        {
+          "ghsaId": "GHSA-5g66-628f-7cvj",
+          "summary": "Omniauth::MicrosoftGraph Account takeover (nOAuth)",
+          "description": "### Summary\nThe implementation did not validate the legitimacy of the `email` attribute of the user nor did it give/document an option to do so, making it susceptible to [nOAuth](https://www.descope.com/blog/post/noauth) misconfiguration in cases when the `email` is used as a trusted user identifier\n",
+          "severity": "HIGH",
+          "publishedAt": "2024-01-03T21:46:46Z",
+          "updatedAt": "2024-01-09T21:57:03Z",
+          "withdrawnAt": null,
+          "identifiers": [
+            {
+              "type": "GHSA",
+              "value": "GHSA-5g66-628f-7cvj"
+            },
+            {
+              "type": "CVE",
+              "value": "CVE-2024-21632"
+            }
+          ],
+          "references": [
+            {
+              "url": "https://github.com/synth/omniauth-microsoft_graph/security/advisories/GHSA-5g66-628f-7cvj"
+            },
+            {
+              "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-21632"
+            },
+            {
+              "url": "https://github.com/synth/omniauth-microsoft_graph/commit/5ffd62690ca0e46978f2fc7d83b18d28edde7795"
+            },
+            {
+              "url": "https://github.com/synth/omniauth-microsoft_graph/commit/f132078389612b797c872b45bd0e0b47382414c1"
+            },
+            {
+              "url": "https://www.descope.com/blog/post/noauth"
+            },
+            {
+              "url": "https://github.com/advisories/GHSA-5g66-628f-7cvj"
+            }
+          ],
+          "vulnerabilities": {
+            "nodes": []
+          }
+        }
+      ]
+    }
+  }
+}
