@@ -85,8 +85,27 @@ Slice 5 complete: end-to-end Hunter CLI + `workflow_dispatch` GitHub Actions wor
 
 ---
 
+## Slice 6 — Checkov wrapper
+
+**Status:** Complete
+
+Slice 6 complete: typed Checkov wrapper with 12 new tests passing (73 total).
+
+- Added `src/cort/types.ts` with `CheckSeverity`, `CheckResult`, `CheckovFinding`, and `CheckovReport` — all grounded in Checkov's documented JSON output schema (https://www.checkov.io/8.Outputs/JSON.html) and normalised to camelCase / flatter shape than Checkov's raw payload
+- Implemented `runCheckov(directory, executor?)` in `src/cort/runCheckov.ts`:
+  - Exports `CheckovExecutor` so tests can inject a fake executor — the default executor is the only path that actually spawns `checkov`
+  - Spawns with exactly `['-d', directory, '--framework', 'terraform', '--output', 'json', '--soft-fail']`
+  - Pre-flights the directory via `fs.stat` so a missing path throws a clear error before the binary is invoked
+  - Default executor intercepts `ENOENT` on spawn and rethrows with `pip install checkov` / `pipx install checkov` install hint
+  - Throws clear errors for non-zero exit codes (naming exit code + stderr) and malformed stdout (naming the directory)
+  - Recomputes `summary` from the partitioned arrays rather than trusting Checkov's `summary` block (which mixes in unrelated keys like `parsing_errors`)
+- Added 3 fixtures under `fixtures/checkov/`: `clean-output.json` (2 passed, 0 failed), `findings-output.json` (mixed HIGH/CRITICAL/MEDIUM failures + 1 suppression), `malformed-output.json` (truncated JSON for error-path)
+- 12 new tests cover: partitioning by result, summary counts, severity preservation, field projection from raw → CheckovFinding, exact executor args, malformed JSON, non-zero exit, missing directory (executor never called), and null severity on suppressed checks
+
+---
+
 ## Upcoming
 
-### Slice 6 — Checkov wrapper
+### Slice 7 — tfsec wrapper
 
-Goal: Checkov wrapper that runs against a Terraform directory and returns typed findings.
+Goal: tfsec wrapper following the same injectable-executor pattern as `runCheckov` — runs against a Terraform directory and returns typed findings.

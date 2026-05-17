@@ -1,0 +1,71 @@
+{
+  "check_type": "terraform",
+  "results": {
+    "passed_checks": [
+      {
+        "check_id": "CKV_AWS_19",
+        "bc_check_id": "BC_AWS_S3_14",
+        "check_name": "Ensure all data stored in the S3 bucket is securely encrypted at rest",
+        "check_result": { "result": "PASSED" },
+        "code_block": [[1, "resource \"aws_s3_bucket\" \"data\" {\n"]],
+        "file_path": "/main.tf",
+        "file_abs_path": "/repo/terraform/main.tf",
+        "file_line_range": [1, 8],
+        "resource": "aws_s3_bucket.data",
+        "evaluations": null,
+        "check_class": "checkov.terraform.checks.resource.aws.S3Encryption",
+        "fixed_definition": null,
+        "entity_tags": null,
+        "caller_file_path": null,
+        "caller_file_line_range": null,
+        "resource_address": null,
+        "severity": "HIGH",
+        "bc_category": null,
+        "benchmarks": null,
+        "description": null,
+        "short_description": null,
+        "vulnerability_details": null,
+        "connected_node": {},
+        "guideline": "https://docs.bridgecrew.io/docs/s3_14-data-encrypted-at-rest",
+        "details": []
+      },
+      {
+        "check_id": "CKV_AWS_21",
+        "bc_check_id": "BC_AWS_S3_16",
+        "check_name": "Ensure all data stored in the S3 bucket have versioning enabled",
+        "check_result": { "result": "PASSED" },
+        "code_block": [[1, "resource \"aws_s3_bucket\" \"data\" {\n"]],
+        "file_path": "/main.tf",
+        "file_abs_path": "/repo/terraform/main.tf",
+        "file_line_range": [1, 8],
+        "resource": "aws_s3_bucket.data",
+        "evaluations": null,
+        "check_class": "checkov.terraform.checks.resource.aws.S3Versioning",
+        "fixed_definition": null,
+        "entity_tags": null,
+        "caller_file_path": null,
+        "caller_file_line_range": null,
+        "resource_address": null,
+        "severity": "LOW",
+        "bc_category": null,
+        "benchmarks": null,
+        "description": null,
+        "short_description": null,
+        "vulnerability_details": null,
+        "connected_node": {},
+        "guideline": null,
+        "details": []
+      }
+    ],
+    "failed_checks": [],
+    "skipped_checks": []
+  },
+  "summary": {
+    "passed": 2,
+    "failed": 0,
+    "skipped": 0,
+    "parsing_errors": 0,
+    "resource_count": 1,
+    "checkov_version": "3.2.0"
+  }
+}

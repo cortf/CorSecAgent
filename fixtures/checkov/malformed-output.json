@@ -1,0 +1,8 @@
+{
+  "check_type": "terraform",
+  "results": {
+    "passed_checks": [
+      {
+        "check_id": "CKV_AWS_19",
+        "check_name": "Ensure all data stored in the S3 bucket is securely encrypted at rest",
+        "check_result": { "result": "PASSED"
