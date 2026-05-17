@@ -17,15 +17,13 @@ export type TfsecExecutor = (
 // (links, impact, rule_provider, etc.) and we only narrow the ones runTfsec
 // actually projects into TfsecFinding.
 //
-// `status` is typed as `number | string`: tfsec historically emits it as an
-// integer (0 = failed, 1 = passed, 2 = ignored — see pkg/scan/result.go) but
-// older / wrapped output occasionally appears as the lower-case string form.
-// The normaliser below handles both shapes.
+// `status` is an integer: 0 = failed, 1 = passed, 2 = ignored. See tfsec's
+// pkg/scan/result.go for the enum.
 interface RawTfsecResult {
   rule_id?: string;
   rule_description?: string;
   severity?: string;
-  status?: number | string;
+  status?: number;
   resource?: string;
   resolution?: string | null;
   location?: {
@@ -115,16 +113,11 @@ function toFinding(r: RawTfsecResult): TfsecFinding {
   };
 }
 
-function normaliseStatus(raw: number | string | undefined): 'passed' | 'failed' {
-  // tfsec convention (pkg/scan/result.go): 0 = failed, 1 = passed, 2 = ignored.
-  // We collapse anything-not-passed into 'failed' so unexpected states surface
-  // rather than being silently dropped — same defensive posture as the Checkov
-  // wrapper's result normaliser.
-  if (typeof raw === 'number') {
-    return raw === 1 ? 'passed' : 'failed';
-  }
-  if ((raw ?? '').toLowerCase() === 'passed') return 'passed';
-  return 'failed';
+function normaliseStatus(raw: number | undefined): 'passed' | 'failed' {
+  // tfsec status enum (pkg/scan/result.go): 0 = failed, 1 = passed, 2 = ignored.
+  // Anything-not-passed collapses to 'failed' so an unexpected ignored / new
+  // status surfaces rather than being silently dropped.
+  return raw === 1 ? 'passed' : 'failed';
 }
 
 function normaliseSeverity(raw: string | undefined): TfsecSeverity {
