@@ -1,0 +1,48 @@
+{
+  "results": [
+    {
+      "rule_id": "AVD-AWS-0088",
+      "long_id": "aws-s3-enable-bucket-encryption",
+      "rule_description": "Unencrypted S3 bucket.",
+      "rule_provider": "aws",
+      "rule_service": "s3",
+      "impact": "The bucket objects could be read if compromised",
+      "resolution": "Configure bucket encryption",
+      "links": [
+        "https://aquasecurity.github.io/tfsec/latest/checks/aws/s3/enable-bucket-encryption/"
+      ],
+      "description": "Bucket has encryption enabled",
+      "severity": "HIGH",
+      "warning": false,
+      "status": 1,
+      "resource": "aws_s3_bucket.data",
+      "location": {
+        "filename": "/repo/terraform/main.tf",
+        "start_line": 1,
+        "end_line": 8
+      }
+    },
+    {
+      "rule_id": "AVD-AWS-0090",
+      "long_id": "aws-s3-enable-versioning",
+      "rule_description": "S3 Data should be versioned",
+      "rule_provider": "aws",
+      "rule_service": "s3",
+      "impact": "Deleted or modified data would not be recoverable",
+      "resolution": "Enable versioning to protect against accidental/malicious removal or modification",
+      "links": [
+        "https://aquasecurity.github.io/tfsec/latest/checks/aws/s3/enable-versioning/"
+      ],
+      "description": "Bucket has versioning enabled",
+      "severity": "MEDIUM",
+      "warning": false,
+      "status": 1,
+      "resource": "aws_s3_bucket.data",
+      "location": {
+        "filename": "/repo/terraform/main.tf",
+        "start_line": 1,
+        "end_line": 8
+      }
+    }
+  ]
+}

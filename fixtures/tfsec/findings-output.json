@@ -1,0 +1,92 @@
+{
+  "results": [
+    {
+      "rule_id": "AVD-AWS-0028",
+      "long_id": "aws-ec2-enforce-http-token-imds",
+      "rule_description": "Instance does not require IMDS access to require a token",
+      "rule_provider": "aws",
+      "rule_service": "ec2",
+      "impact": "Instance metadata service can be interacted with freely",
+      "resolution": "Enable HTTP token requirement for IMDS",
+      "links": [
+        "https://aquasecurity.github.io/tfsec/latest/checks/aws/ec2/enforce-http-token-imds/"
+      ],
+      "description": "Instance does not require IMDSv2 tokens",
+      "severity": "HIGH",
+      "warning": false,
+      "status": 0,
+      "resource": "aws_instance.app",
+      "location": {
+        "filename": "/repo/terraform/ec2.tf",
+        "start_line": 10,
+        "end_line": 25
+      }
+    },
+    {
+      "rule_id": "AVD-AWS-0088",
+      "long_id": "aws-s3-enable-bucket-encryption",
+      "rule_description": "Unencrypted S3 bucket.",
+      "rule_provider": "aws",
+      "rule_service": "s3",
+      "impact": "The bucket objects could be read if compromised",
+      "resolution": "Configure bucket encryption",
+      "links": [
+        "https://aquasecurity.github.io/tfsec/latest/checks/aws/s3/enable-bucket-encryption/"
+      ],
+      "description": "Bucket does not have encryption enabled",
+      "severity": "CRITICAL",
+      "warning": false,
+      "status": 0,
+      "resource": "aws_s3_bucket.public",
+      "location": {
+        "filename": "/repo/terraform/s3.tf",
+        "start_line": 1,
+        "end_line": 6
+      }
+    },
+    {
+      "rule_id": "AVD-AWS-0107",
+      "long_id": "aws-ec2-no-public-ingress-sgr",
+      "rule_description": "An ingress security group rule allows traffic from /0.",
+      "rule_provider": "aws",
+      "rule_service": "ec2",
+      "impact": "Your port is exposed to the internet",
+      "resolution": "Set a more restrictive cidr range",
+      "links": [
+        "https://aquasecurity.github.io/tfsec/latest/checks/aws/ec2/no-public-ingress-sgr/"
+      ],
+      "description": "Security group rule allows ingress from public internet to port 22",
+      "severity": "MEDIUM",
+      "warning": false,
+      "status": 0,
+      "resource": "aws_security_group.open_ssh",
+      "location": {
+        "filename": "/repo/terraform/sg.tf",
+        "start_line": 40,
+        "end_line": 55
+      }
+    },
+    {
+      "rule_id": "AVD-AWS-0090",
+      "long_id": "aws-s3-enable-versioning",
+      "rule_description": "S3 Data should be versioned",
+      "rule_provider": "aws",
+      "rule_service": "s3",
+      "impact": "Deleted or modified data would not be recoverable",
+      "resolution": "Enable versioning to protect against accidental/malicious removal or modification",
+      "links": [
+        "https://aquasecurity.github.io/tfsec/latest/checks/aws/s3/enable-versioning/"
+      ],
+      "description": "Bucket has versioning enabled",
+      "severity": "MEDIUM",
+      "warning": false,
+      "status": 1,
+      "resource": "aws_s3_bucket.public",
+      "location": {
+        "filename": "/repo/terraform/s3.tf",
+        "start_line": 1,
+        "end_line": 6
+      }
+    }
+  ]
+}

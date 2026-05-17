@@ -104,8 +104,40 @@ Slice 6 complete: typed Checkov wrapper with 12 new tests passing (73 total).
 
 ---
 
+## Slice 7 — tfsec wrapper
+
+**Status:** Complete
+
+Slice 7 complete: typed tfsec wrapper with 12 new tests passing (85 total).
+
+- Extended `src/cort/types.ts` with `TfsecSeverity` (aliased to `CheckSeverity` since the two scales align today, kept as a distinct export so future drift has a single seam), `TfsecFinding` (flatter, camelCased — projects `location.filename` / `start_line` / `end_line` into `filePath` + `lineRange`), and `TfsecReport` — no `skipped` array, since tfsec has no equivalent state (commented in the type header)
+- Implemented `runTfsec(directory, executor?)` in `src/cort/runTfsec.ts`:
+  - Exports `TfsecExecutor` so tests can inject a fake executor — the default executor is the only path that actually spawns `tfsec`
+  - Spawns with exactly `[directory, '--format', 'json', '--soft-fail']` — directory is the positional arg, NOT behind a `-d` flag (the real behavioural difference from Checkov)
+  - Pre-flights the directory via `fs.stat` so a missing path throws a clear error before the binary is invoked
+  - Default executor intercepts `ENOENT` on spawn and rethrows with a pointer to https://github.com/aquasecurity/tfsec (install varies by platform — brew / `go install` / binary / container — so no single command is prescribed)
+  - Normalises `status` from tfsec's integer enum (0 = failed, 1 = passed, 2 = ignored per `pkg/scan/result.go`) into the narrowed `'passed' | 'failed'` form; also accepts the string form defensively
+  - Throws clear errors for non-zero exit codes (naming exit code + stderr) and malformed stdout (naming the directory)
+  - Recomputes `summary` from the partitioned arrays rather than trusting any tfsec-level summary
+- Added 3 fixtures under `fixtures/tfsec/`: `clean-output.json` (2 passed, 0 failed), `findings-output.json` (IMDSv2 HIGH + S3-encryption CRITICAL + open-SG MEDIUM failures plus 1 passing S3-versioning check — themes deliberately overlap the Checkov findings fixture so Slice 9's aggregator has real dedup material), `malformed-output.json` (truncated JSON for error-path)
+- 12 new tests cover: empty `results[]` produces empty arrays + zero counts, partitioning by `status`, summary counts, severity preservation, field projection (location → filePath/lineRange, resolution surfaced), exact executor args **with explicit assertion that `-d` is absent and the directory sits at position 0**, malformed JSON, non-zero exit, and missing-directory short-circuit (executor never called)
+
+### Non-trivial differences from `runCheckov` (notes for the future refactor)
+
+- **CLI shape:** Checkov takes `-d <dir>`; tfsec takes `<dir>` positionally. A shared executor abstraction would need a per-tool args builder, not a shared arg list.
+- **Output partitioning:** Checkov pre-partitions into `passed_checks` / `failed_checks` / `skipped_checks`; tfsec emits one flat `results[]` and the wrapper partitions on a `status` field. A shared finding-mapper would need to plug in different "split this raw payload into buckets" strategies.
+- **Status encoding:** tfsec uses an integer enum (0/1/2); Checkov uses uppercase result strings. Both wrappers ended up with their own `normaliseStatus`/`normaliseResult` function.
+- **Severity nullability:** Checkov frequently emits `severity: null` on community checks → `CheckSeverity | null`; tfsec always ships a severity → `TfsecSeverity` (non-null). The shared finding type can't simply union these without losing precision.
+- **Skipped state:** Checkov has a third bucket; tfsec doesn't. A shared report type either carries an always-empty `skipped` for tfsec or is generic over the bucket set. The current per-tool types sidestep this.
+- **Install-hint copy:** Checkov has one canonical install (`pip install checkov`); tfsec installs vary by platform. The shared default-executor builder would need a per-tool error-hint string.
+- **Location shape:** Checkov sets `file_path` + `file_line_range` as siblings; tfsec nests them under `location`. The raw-shape parsers differ structurally, not just by key name.
+
+Net assessment: ~70% of the wrapper bodies overlap structurally (pre-flight → spawn → exit-code check → JSON parse → partition → summary → throw shapes), but every meaningful seam (args, partition predicate, status normaliser, severity nullability, install hint, raw → finding mapper) varies by tool. A shared `runScanner` would need 6+ injection points, which is roughly the same surface area as keeping two concrete wrappers. Worth revisiting only if a third scanner lands.
+
+---
+
 ## Upcoming
 
-### Slice 7 — tfsec wrapper
+### Slice 8 — AWS context checks
 
-Goal: tfsec wrapper following the same injectable-executor pattern as `runCheckov` — runs against a Terraform directory and returns typed findings.
+Goal: AWS context checks (ALB presence, IMDSv2 enforcement on Fargate task definitions) via injectable AWS SDK clients — same dependency-injection pattern as the scanner wrappers.
