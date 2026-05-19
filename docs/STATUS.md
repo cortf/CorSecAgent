@@ -136,8 +136,59 @@ Net assessment: ~70% of the wrapper bodies overlap structurally (pre-flight → 
 
 ---
 
+## Slice 8 — AWS context checks
+
+**Status:** Complete
+
+Slice 8 complete: AWS context checks (ALB presence + Fargate IMDSv2) with 17 new tests passing (102 total).
+
+- Added `AlbContextFinding`, `Imdsv2Finding`, `Imdsv2Report`, and `AwsContextReport` to `src/cort/types.ts` with header comments anchoring each shape to the AWS API surface it represents
+- Installed `@aws-sdk/client-elastic-load-balancing-v2` and `@aws-sdk/client-ecs` (modular AWS SDK v3 — small dep cost per slice spec)
+- Implemented `src/cort/awsContextChecks.ts` with three exports plus one helper:
+  - `checkAlbPresence(client?)` — paginates `DescribeLoadBalancers` via `Marker` / `NextMarker`, filters to `Type === 'application'`, returns count and ARNs
+  - `checkFargateImdsv2(client?)` — paginates `ListTaskDefinitions` (`status: 'ACTIVE'`) via `nextToken`, then `DescribeTaskDefinition` per ARN, skips non-Fargate task defs via `requiresCompatibilities.includes('FARGATE')`
+  - `runAwsContextChecks(elbClient?, ecsClient?)` — sequential orchestrator (intentional: keeps per-check error attribution clean)
+  - `classifyHttpTokens(raw)` — extracted compliance rule (`'required'` → compliant; `'optional'` → non-compliant; absent → `'not-set'` / non-compliant), so the rule is unit-testable independently of SDK plumbing
+- Both per-check functions default to constructing an AWS SDK v3 client with `new XClient({})` (relies on the default credential chain — Slice 11 will wire OIDC); both wrap SDK errors with the check name and call name (`checkAlbPresence: ALB ...`, `checkFargateImdsv2: Fargate DescribeTaskDefinition call failed for <arn>: ...`)
+- Added 5 fixtures under `fixtures/aws/`: mixed LB response (2 ALBs + 1 NLB to drive the filtering test), empty LB response, Fargate task definition (compliant-naming aspirational — see limitation below), Fargate task definition (non-compliant-naming aspirational), and an EC2-only task definition (must be skipped)
+- 17 new tests cover: ALB filtering by Type, empty account, two-page pagination (Marker/NextMarker), ALB error wrapping; Fargate-only filtering, the documented current behaviour (every Fargate task def → 'not-set' / non-compliant), field projection (family/revision/arn), nextToken pagination, empty-account, list-call and describe-call error wrapping with offending ARN; the composite orchestrator; and the `classifyHttpTokens` rule itself (all three branches plus null and unknown)
+
+### ⚠️ IMDSv2 field-path limitation (verified against the SDK)
+
+Per the slice prompt's explicit ask to flag uncertainty about the IMDSv2 field path: **the AWS ECS SDK `TaskDefinition` shape has no `HttpTokens` / IMDSv2 field at all.** Confirmed by grepping the entire `@aws-sdk/client-ecs` package (zero matches for `httpToken`, `IMDSv2`, or related). This is not an SDK oversight — IMDSv2 enforcement on Fargate is controlled by the Fargate *platform version* (1.4.0+ enforces IMDSv2 by default with a hop limit of 2), not by a task-definition property. For ECS-on-EC2, IMDSv2 lives on the EC2 launch template's `MetadataOptions.HttpTokens`, also outside the task definition.
+
+This limitation was addressed immediately in Slice 8b (below) by switching the check from "is the task definition configured for IMDSv2?" to "are the services that run our Fargate tasks on a platform version that enforces IMDSv2?" — the latter being the actual mechanism on Fargate.
+
+---
+
+## Slice 8b — IMDSv2 check correctness (DescribeServices.platformVersion)
+
+**Status:** Complete
+
+Slice 8b complete: re-architected `checkFargateImdsv2` to ask the right question (Fargate platform version on running services) instead of the unanswerable one (HttpTokens on task definitions). 12 net new tests, 114 total passing.
+
+- **Updated `Imdsv2Finding` shape** in `src/cort/types.ts` from task-def-oriented (`taskDefinitionArn`, `family`, `revision`, `httpTokens`) to service-oriented (`serviceArn`, `serviceName`, `clusterArn`, `taskDefinitionArn`, `platformVersion`, `compliant`). Header comment rewritten to explain the platform-version mechanism and document the "absent platformVersion = LATEST" AWS default.
+- **Rewrote `checkFargateImdsv2`** as a ListClusters → ListServices(per cluster) → DescribeServices(per cluster, batched ≤ 10) pipeline, then per-service Fargate filter, then `classifyPlatformVersion`. Replaced the previous ListTaskDefinitions / DescribeTaskDefinition pipeline. Fargate detection covers both `launchType: 'FARGATE'` AND `capacityProviderStrategy[*].capacityProvider ∈ {'FARGATE', 'FARGATE_SPOT'}`.
+- **Replaced `classifyHttpTokens` with `classifyPlatformVersion`** — routes through `src/shared/semverRange.isVersionInRange` for the `>= 1.4.0` comparison (per CLAUDE.md hard rule: no direct `semver` calls in feature code). `LATEST` / absent → compliant; specific version → boundary compare; invalid semver → reported verbatim as non-compliant rather than crashing.
+- **Per-call error wrappers** name the specific ECS API that failed (`ListClusters` / `ListServices` / `DescribeServices`) and include the offending cluster ARN where applicable, so a single failing cluster is attributable without re-running the check.
+- **DescribeServices `failures[]` array intentionally ignored** — a partial failure on one service (e.g. deleted mid-call) should not poison the rest of the response. The successful services in the same response are still classified normally.
+- **Replaced fixtures:** removed three obsolete `task-definition-*.json` files; added `fixtures/aws/describe-services-mixed.json` with 5 services exercising every classification branch (LATEST, 1.4.0, 1.3.0, FARGATE_SPOT with absent platformVersion, EC2 launchType to be skipped).
+- **29 tests** cover: ALB checks (unchanged from Slice 8 — 4 tests); `classifyPlatformVersion` (LATEST, absent, empty, "1.4.0" boundary, "1.5.0", "1.3.0", "1.0.0", malformed — 9 tests); the full pipeline (Fargate filtering, classification, FARGATE_SPOT treatment, summary counts, field projection, empty account, empty cluster — 7 tests); pagination (ListClusters nextToken, ListServices nextToken, DescribeServices batching at exactly 10/10/3 for 23 services — 3 tests); per-call error wrapping (ListClusters, ListServices, DescribeServices — 3 tests); composite orchestrator; and fixture shape assertions.
+
+### Why this was the right call before Slice 9
+
+The Slice 9 aggregator will consume `Imdsv2Report` and decide how to surface findings to humans. Designing the aggregator around a check that returns deliberately wrong data ("everything is non-compliant because we couldn't measure it") and then re-designing it later was more work than fixing the check now. The semantics shift also genuinely improves what we ask — Fargate IMDSv2 enforcement *is* a platform-version concern, not a task-definition concern, so the new check matches reality. The `classifyPlatformVersion` helper isolates the only piece of policy in the check, so future tuning (e.g. raising the floor as AWS deprecates older platform versions) lives behind one obvious seam.
+
+### Completion discipline notes
+
+- **Scope guards honoured:** `runCheckov.ts`, `runTfsec.ts`, `src/hunter/`, `src/shared/` (other than the read-only import of `isVersionInRange`) untouched. No findings aggregation (Slice 9). No Cort workflow / OIDC wiring (Slice 11).
+- **Deviation from the Slice 8 spec:** the `httpTokens: 'required' | 'optional' | 'not-set'` finding shape no longer exists. It encoded the old (incorrect) task-def-config framing; the new shape encodes platform version directly. Documented in the `Imdsv2Finding` header.
+- **No remaining uncertainty about external system shapes** — the `Service.platformVersion`, `launchType`, and `capacityProviderStrategy` fields were verified directly against `@aws-sdk/client-ecs/dist-types/models/models_0.d.ts`. The `DescribeServices` 10-service-per-call cap is documented in the SDK request type's JSDoc and is what `DESCRIBE_SERVICES_BATCH_SIZE` is anchored to.
+
+---
+
 ## Upcoming
 
-### Slice 8 — AWS context checks
+### Slice 9 — Findings aggregator
 
-Goal: AWS context checks (ALB presence, IMDSv2 enforcement on Fargate task definitions) via injectable AWS SDK clients — same dependency-injection pattern as the scanner wrappers.
+Goal: aggregator that consumes Checkov + tfsec + AWS context reports and produces a unified deduplicated findings structure.

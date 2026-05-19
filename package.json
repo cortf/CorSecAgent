@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@aws-sdk/client-ecs": "^3.1048.0",
+    "@aws-sdk/client-elastic-load-balancing-v2": "^3.1048.0",
     "@octokit/graphql": "^8.1.1",
     "semver": "^7.6.3"
   },

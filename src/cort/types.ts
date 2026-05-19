@@ -94,3 +94,65 @@ export interface TfsecReport {
     failed: number;
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AWS context check types
+//
+// Where Checkov and tfsec inspect IaC at rest, the AWS context checks inspect
+// what is *actually deployed* in the account by querying live AWS APIs. The
+// reports below are produced by `runAwsContextChecks` and the per-check
+// helpers in src/cort/awsContextChecks.ts.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Result of `checkAlbPresence`. Account-level presence only for this slice —
+// a future slice may refine this to "is THIS service behind an ALB" by joining
+// against target group / listener data.
+export interface AlbContextFinding {
+  albCount: number;
+  albArns: string[];
+}
+
+// One row per Fargate-running ECS service inspected by `checkFargateImdsv2`.
+//
+// This check answers "are the services that run our Fargate task definitions
+// on a Fargate platform version that enforces IMDSv2?" — rather than asking
+// the task definition directly, because the AWS ECS SDK does not expose any
+// HttpTokens / IMDSv2 field on the TaskDefinition shape. IMDSv2 enforcement
+// on Fargate is controlled by the *platform version*: 1.4.0+ enforces IMDSv2
+// by default with a hop limit of 2 (released April 2020). `LATEST` is always
+// the current platform version and is therefore always compliant.
+//
+// "Compliant" therefore means the service's platformVersion is `LATEST` or a
+// specific version `>= 1.4.0`. Anything earlier (`1.3.0`, `1.0.0`, …) is
+// flagged. A service with no explicit platformVersion defaults to `LATEST`
+// per the AWS docs (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/platform_versions.html),
+// so the wrapper normalises absent values to `'LATEST'` rather than treating
+// them as a missing-data finding.
+//
+// Only services running on Fargate are inspected — EC2-launch services are
+// skipped entirely. Fargate detection covers both `launchType: 'FARGATE'` and
+// capacity-provider services using `'FARGATE'` or `'FARGATE_SPOT'`.
+export interface Imdsv2Finding {
+  serviceArn: string;
+  serviceName: string;
+  clusterArn: string;
+  taskDefinitionArn: string;
+  platformVersion: string;
+  compliant: boolean;
+}
+
+// Top-level report produced by `checkFargateImdsv2`. Summary counts mirror
+// the partitioned counts on `checked` exactly.
+export interface Imdsv2Report {
+  checked: Imdsv2Finding[];
+  compliantCount: number;
+  nonCompliantCount: number;
+}
+
+// Composite report produced by `runAwsContextChecks` — the two per-check
+// reports rolled into one object so downstream consumers (the future Slice 9
+// aggregator) only have to depend on a single top-level type.
+export interface AwsContextReport {
+  alb: AlbContextFinding;
+  imdsv2: Imdsv2Report;
+}

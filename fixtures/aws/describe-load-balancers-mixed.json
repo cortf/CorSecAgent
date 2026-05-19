@@ -1,0 +1,31 @@
+{
+  "LoadBalancers": [
+    {
+      "LoadBalancerArn": "arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/web-alb/abc111",
+      "DNSName": "web-alb-1234567890.us-east-1.elb.amazonaws.com",
+      "LoadBalancerName": "web-alb",
+      "Scheme": "internet-facing",
+      "VpcId": "vpc-aaaa1111",
+      "Type": "application",
+      "State": { "Code": "active" }
+    },
+    {
+      "LoadBalancerArn": "arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/api-alb/abc222",
+      "DNSName": "api-alb-9876543210.us-east-1.elb.amazonaws.com",
+      "LoadBalancerName": "api-alb",
+      "Scheme": "internal",
+      "VpcId": "vpc-aaaa1111",
+      "Type": "application",
+      "State": { "Code": "active" }
+    },
+    {
+      "LoadBalancerArn": "arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/net/edge-nlb/abc333",
+      "DNSName": "edge-nlb-5555555555.elb.us-east-1.amazonaws.com",
+      "LoadBalancerName": "edge-nlb",
+      "Scheme": "internet-facing",
+      "VpcId": "vpc-aaaa1111",
+      "Type": "network",
+      "State": { "Code": "active" }
+    }
+  ]
+}

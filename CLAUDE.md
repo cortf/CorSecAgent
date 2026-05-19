@@ -95,3 +95,31 @@ module internals.
 
 **No `beforeEach` / shared mutable state** unless the setup is genuinely
 expensive. Prefer `const` declarations inside each `describe` block.
+
+## Completion discipline
+
+Every slice summary must include:
+
+- **What was built** — one or two sentences per file changed
+- **Confirmed scope guards** — restate which "do not touch" items the slice
+  prompt called out, and confirm they were honoured
+- **Any deviations from the spec, with reasoning** — if the implementation
+  diverged from the slice prompt (renamed a field, skipped a sub-task, chose a
+  different abstraction), name the divergence and explain why
+- **Any uncertainty about external system shapes** — API responses, library
+  types, runtime behaviour, anything that wasn't fully verified against ground
+  truth. Surface this *prominently*, not in a footnote
+
+If the spec turned out to be wrong, say so explicitly. The spec is wrong more
+often than the implementation. The slice author operates from general
+knowledge and training data; the engineer operates from ground truth (the
+actual SDK types, the actual API response shape, the actual lockfile). When
+those disagree, ground truth wins — and the gap is the most valuable thing in
+the summary, because it's where the architectural model needs updating.
+
+This isn't optional politeness. Two slices in a row, the act of writing a
+concrete completion summary surfaced a real architectural assumption that
+needed fixing (multi-node advisory traversal in Slice 3; IMDSv2 platform-version
+vs task-definition in Slice 8). That's not a coincidence — the summary is
+where "what I built" gets compared to "what was specified," and the gap is the
+discovery.
