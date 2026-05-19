@@ -1,0 +1,12 @@
+[
+  {
+    "ghsaId": "GHSA-jf85-cpcp-j695",
+    "packageName": "lodash",
+    "installedVersion": "4.17.20",
+    "vulnerableRange": "< 4.17.21",
+    "patchedVersion": "4.17.21",
+    "severity": "HIGH",
+    "cvssScore": 7.4,
+    "summary": "Prototype Pollution in lodash before 4.17.21"
+  }
+]

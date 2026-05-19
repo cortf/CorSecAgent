@@ -1,0 +1,12 @@
+[
+  {
+    "ghsaId": "GHSA-no-fix-yet-aaaa",
+    "packageName": "unpatched-pkg",
+    "installedVersion": "1.0.0",
+    "vulnerableRange": "< 2.0.0",
+    "patchedVersion": null,
+    "severity": "CRITICAL",
+    "cvssScore": 9.8,
+    "summary": "No fix yet — advisory open, no firstPatchedVersion published"
+  }
+]

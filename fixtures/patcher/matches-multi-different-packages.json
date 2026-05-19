@@ -1,0 +1,22 @@
+[
+  {
+    "ghsaId": "GHSA-pkgA-aaaa",
+    "packageName": "pkg-a",
+    "installedVersion": "1.0.0",
+    "vulnerableRange": "< 2.0.0",
+    "patchedVersion": "2.0.0",
+    "severity": "HIGH",
+    "cvssScore": null,
+    "summary": "pkg-a needs a bump to 2.x"
+  },
+  {
+    "ghsaId": "GHSA-pkgB-bbbb",
+    "packageName": "pkg-b",
+    "installedVersion": "1.0.0",
+    "vulnerableRange": "< 3.0.0",
+    "patchedVersion": "3.0.0",
+    "severity": "MODERATE",
+    "cvssScore": null,
+    "summary": "pkg-b needs a bump to 3.x"
+  }
+]

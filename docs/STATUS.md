@@ -226,8 +226,53 @@ Slice 9 complete: Cort's findings aggregator with 35 new tests passing (149 tota
 
 ---
 
+## Slice 10 — Patch-and-test step
+
+**Status:** Complete
+
+Slice 10 complete: patcher consumes Hunter's `matches.json`, consolidates per package, attempts `npm install` upgrades, and runs the test suite once. 13 new tests passing (162 total).
+
+### What was built
+
+- **`src/patcher/types.ts`** — three exports: `PatchStatus` (5-member union covering every terminal branch), `PatchResult` (one row per *consolidated* package — the unit a human reviews), and `PatchSession` (the top-level JSON shape persisted to `outputPath`, with `branchName`, sorted `results[]`, and a 5-field `summary`). Header comments call out the consolidation invariant and the "stale Hunter data" rationale for `skipped-already-resolved`.
+- **`src/patcher/applyPatches.ts`** — `applyPatches(opts, executors?)` with three injectable executors (`git`, `npm`, `shell`) defaulting to `child_process.spawn`-based implementations. The pipeline: read matches → consolidate by package (picking the highest patchedVersion per group, marking the whole group `no-fix` if *any* match has `patchedVersion: null`) → re-read the current lockfile via `loadInstalledVersions` → classify each consolidated entry as `no-fix` / `already-resolved` / `attempt` → create one branch up front *only if* there's at least one real install to attempt → run `npm install <pkg>@^<targetVersion>` per attemptable package, capturing install errors without aborting the session → run the shared test command exactly once after all installs → distribute the test outcome (`patched-tests-passed` / `patched-tests-failed`) to every successfully-installed package → sort results alphabetically by `packageName` → write a 2-space-indented JSON `PatchSession` to `outputPath`. The "tests run once" trade-off (simpler/faster vs. per-install isolation) is documented in-line on the function header.
+- **`pickHighest` helper** routes through `shared/semverRange.isVersionInRange` for version comparison (CLAUDE.md hard rule: no direct `semver` calls in feature code). The already-resolved check uses the same `>= ${patchedVersion}` predicate against the current lockfile.
+- **`truncateTail` helper** clips combined stdout+stderr at 5 KiB tail-first so the failure context (which almost always surfaces near the end of a test run) survives.
+- **Five matches fixtures** in `fixtures/patcher/`: `matches-single.json` (one lodash advisory), `matches-multi-same-package.json` (two wrangler advisories with patchedVersions 3.20.0 and 3.25.0 — consolidation must pick 3.25.0 and list both GHSAs), `matches-no-fix.json` (`patchedVersion: null`), `matches-already-resolved.json` (Hunter saw 4.0.0, but the lockfile has 5.1.0), `matches-multi-different-packages.json` (pkg-a + pkg-b for the install-failure-doesn't-abort and shared-test-run tests).
+- **Three lockfile fixtures** in `fixtures/patcher/`: `package.json` (declares six dependencies), `lockfile-before.json` (initial state; `resolved-pkg` deliberately at 5.1.0 to exercise the already-resolved branch), `lockfile-after-single.json` and `lockfile-after-wrangler.json` (post-install snapshots — present for spec compliance; the actual tests mutate the in-tmp lockfile in-place via the npm executor mock, which is the realistic simulation of what `npm install` does).
+- **`tests/applyPatches.test.ts`** — 13 tests across 10 `describe` blocks: empty matches (zero invocations of git/npm/shell), single-match happy path (one install, one test, one branch, asserts the `lodash@^4.17.21` arg shape), 2-space JSON round-trip, multi-match-same-package consolidation (one install at the higher patched version, both GHSAs in `relatedMatches`), `patch-failed-no-fix-available` with zero side effects, `skipped-already-resolved` with zero side effects, install failure on pkg-a does not abort pkg-b, shared test-failure marks every successfully-installed package as `patched-tests-failed`, branch created exactly once (and uses `branchPrefix` override when supplied), `testOutput` truncated to 5 KiB with the tail preserved (head sentinel dropped, tail sentinel survives), deterministic alphabetical ordering across two runs, and a "no real spawn happened" sanity check.
+
+### Confirmed scope guards
+
+- **No `git push`, no PR creation, no GitHub API calls** — `applyPatches` only ever invokes the injected `git` with `['checkout', '-b', <branch>]`. Slice 12 is responsible for pushing and opening the PR.
+- **No LLM calls** — no Anthropic SDK import in `src/patcher/`.
+- **No advisory fetching** — input is Hunter's `matches.json`, already produced.
+- **No workflow YAML changes** — `.github/workflows/` untouched.
+- **`src/hunter/`, `src/cort/`, `src/shared/` untouched** — `applyPatches` only *imports* `MatchedThreat` (type), `loadInstalledVersions` (function), and `isVersionInRange` (function); no edits.
+- **Patcher creates its own folder** — everything new lives under `src/patcher/` (and `fixtures/patcher/` / `tests/applyPatches.test.ts`).
+- **Hard rule: no direct `semver` calls** — `pickHighest` and the already-resolved check both go through `isVersionInRange`.
+
+### Deviations from the spec, with reasoning
+
+- **`previousVersion` reads the current lockfile, not `matches[i].installedVersion`.** The spec said "re-checked after consolidation" for the already-resolved decision, which implies re-reading the lockfile anyway. Using the freshly-read version for `previousVersion` keeps a single coherent source of truth: every field on a `PatchResult` reflects the workspace as the patcher sees it now, not what Hunter saw at scan time. If the lockfile read fails, we fall back to `matches[i].installedVersion`. The Hunter snapshot's installedVersion is still implicitly preserved in `matches.json`, which lives next to the PatchSession output.
+- **Branch is created only when at least one package needs a real install attempt**, not on every non-empty matches input. A session that contains only `no-fix` or `already-resolved` entries produces results without invoking git — there is no work for the branch to hold. The "no-fix produces no git/npm calls" test would otherwise fail. This matches the spec's intent ("before any installs") and keeps git artefacts out of no-op sessions.
+- **`shell` executor takes a single command string**, not an args array, because the user passes the test command verbatim (`npm test`, `npm run test:integration -- --bail`, etc.) and parsing it ourselves would silently break valid invocations. This matches the spec exactly (`shell?: (command: string, cwd: string) => …`) — calling it out because it's the one ergonomic divergence between the three executors.
+- **`PatchResult.relatedMatches` is sorted alphabetically** by GHSA ID inside the consolidation step. The spec said "all GHSA IDs across the consolidated matches" without specifying order; deterministic ordering makes the JSON output reproducible across runs (one of the test invariants).
+- **Truncation uses 5 KiB (5 × 1024 = 5120 bytes)**, not 5000 bytes. The spec said "5KB" which is ambiguous; binary KiB is the more common interpretation for byte-level truncation budgets. The constant lives on its own line so it is a one-edit change if we want decimal-KB instead.
+
+### Uncertainty about external system shapes (npm/git CLI)
+
+Per the slice prompt's explicit ask to flag uncertainty about npm/git invocation shapes:
+
+- **`npm install <pkg>@^<version>`** — verified against the current npm docs (npm-install(1)): `npm install <pkg-name>@<version-range>` installs a matching version, and the `^` prefix is a semver range modifier, not a shell special. Because we pass the install spec as a single argv element through `spawn` (no `shell: true`), the caret is not subject to any shell interpretation. The default `--save-prod` behaviour updates `package.json` and `package-lock.json`; both are the side effects we depend on for the `loadInstalledVersions` re-read.
+- **`git checkout -b <branch>`** — verified against `git-checkout(1)`: the canonical "create + switch" form. We deliberately do *not* run `git switch -c` (the newer recommended form) because `checkout -b` is universally available across the git versions GitHub Actions ships, and the slice does not need any of `switch`'s extra semantics.
+- **Things I did NOT verify and that a future slice should validate against ground truth in CI:** (1) whether `npm install` on a project without a `node_modules/` directory still updates `package-lock.json` reliably (it does in npm v7+, but the behaviour around the `--package-lock-only` flag and various offline-cache configurations is subtle); (2) whether `git checkout -b` aborts cleanly when the working tree contains the unstaged changes from a prior failed install (it should refuse and exit non-zero, which `applyPatches` surfaces via the thrown error, but I did not test it); (3) the exact stderr format `npm install` produces on a peer-dependency conflict — the test uses synthetic `npm ERR! could not install …` strings, and the real stderr will be richer; the `errorMessage` field passes it through verbatim, so the reporter (Slice 11) will see whatever npm actually printed.
+- **Default `shell` executor uses `spawn(command, { shell: true })`** — the no-args form. This works on POSIX and Windows but uses the platform default shell (`/bin/sh` on POSIX, `cmd.exe` on Windows), so test commands that rely on bash-specific syntax may behave differently in different CI environments. For our intended usage (`npm test` and similar), this is not a concern.
+
+---
+
 ## Upcoming
 
-### Slice 10 — Patch-and-test step
+### Slice 11 — LLM reporter
 
-Goal: consume Hunter's `matches.json` and produce a hotfix branch with `npm install` upgrades and passing tests.
+Goal: single Anthropic API call that consumes Hunter's `matches.json` + Cort's `AggregatedReport` + the patcher's `PatchSession`, and produces the PR description markdown. This is the second (and last) sanctioned LLM touchpoint in the pipeline.

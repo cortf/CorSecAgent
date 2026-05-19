@@ -165,9 +165,13 @@ function fromTfsec(f: TfsecFinding): NormalizedFinding {
 // Rule: highest severity wins; ties broken by preferring Checkov, for stable
 // ordering when both scanners flag the same thing at the same severity.
 function pickRepresentative(group: NormalizedFinding[]): NormalizedFinding {
-  let best = group[0];
+  // Callers always pass a non-empty group (it is the value side of a Map that
+  // was populated as findings were normalised). The `!` reflects that
+  // construction-time invariant rather than runtime checks the caller already
+  // proved.
+  let best = group[0]!;
   for (let i = 1; i < group.length; i++) {
-    const candidate = group[i];
+    const candidate = group[i]!;
     const candRank = SEVERITY_RANK[candidate.severity];
     const bestRank = SEVERITY_RANK[best.severity];
     if (candRank > bestRank) {
@@ -212,8 +216,7 @@ export function aggregateFindings(
   // synthetic key per-entry so they never collide with each other — this is
   // how "uncategorized never deduplicates" is implemented.
   const groups = new Map<string, NormalizedFinding[]>();
-  for (let i = 0; i < normalized.length; i++) {
-    const n = normalized[i];
+  for (const [i, n] of normalized.entries()) {
     const key =
       n.category === 'uncategorized'
         ? `uncategorized::${i}::${n.scanner}::${n.ruleId}`
@@ -229,9 +232,11 @@ export function aggregateFindings(
   const findings: AggregatedFinding[] = [];
   for (const group of groups.values()) {
     const representative = pickRepresentative(group);
-    let severity: UnifiedSeverity = group[0].severity;
+    // group is non-empty: every entry in `groups` was created with a single
+    // initial NormalizedFinding (the `groups.set(key, [n])` branch above).
+    let severity: UnifiedSeverity = group[0]!.severity;
     for (let i = 1; i < group.length; i++) {
-      severity = maxSeverity(severity, group[i].severity);
+      severity = maxSeverity(severity, group[i]!.severity);
     }
     findings.push({
       category: representative.category,

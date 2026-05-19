@@ -1,0 +1,22 @@
+[
+  {
+    "ghsaId": "GHSA-cfph-4qqh-w828",
+    "packageName": "wrangler",
+    "installedVersion": "3.10.0",
+    "vulnerableRange": ">= 3.0.0, < 3.20.0",
+    "patchedVersion": "3.20.0",
+    "severity": "HIGH",
+    "cvssScore": null,
+    "summary": "wrangler advisory one — lower patched-version boundary"
+  },
+  {
+    "ghsaId": "GHSA-f8mp-x433-5wpf",
+    "packageName": "wrangler",
+    "installedVersion": "3.10.0",
+    "vulnerableRange": ">= 3.0.0",
+    "patchedVersion": "3.25.0",
+    "severity": "MODERATE",
+    "cvssScore": null,
+    "summary": "wrangler advisory two — higher patched-version boundary (consolidation should pick this one)"
+  }
+]

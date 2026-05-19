@@ -1,0 +1,44 @@
+{
+  "name": "patcher-fixture-project",
+  "version": "1.0.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "patcher-fixture-project",
+      "version": "1.0.0",
+      "dependencies": {
+        "lodash": "^4.17.20",
+        "wrangler": "^3.10.0",
+        "unpatched-pkg": "^1.0.0",
+        "resolved-pkg": "^4.0.0",
+        "pkg-a": "^1.0.0",
+        "pkg-b": "^1.0.0"
+      }
+    },
+    "node_modules/lodash": {
+      "version": "4.17.20",
+      "resolved": "https://registry.npmjs.org/lodash/-/lodash-4.17.20.tgz"
+    },
+    "node_modules/wrangler": {
+      "version": "3.10.0",
+      "resolved": "https://registry.npmjs.org/wrangler/-/wrangler-3.10.0.tgz"
+    },
+    "node_modules/unpatched-pkg": {
+      "version": "1.0.0",
+      "resolved": "https://registry.npmjs.org/unpatched-pkg/-/unpatched-pkg-1.0.0.tgz"
+    },
+    "node_modules/resolved-pkg": {
+      "version": "5.1.0",
+      "resolved": "https://registry.npmjs.org/resolved-pkg/-/resolved-pkg-5.1.0.tgz"
+    },
+    "node_modules/pkg-a": {
+      "version": "1.0.0",
+      "resolved": "https://registry.npmjs.org/pkg-a/-/pkg-a-1.0.0.tgz"
+    },
+    "node_modules/pkg-b": {
+      "version": "1.0.0",
+      "resolved": "https://registry.npmjs.org/pkg-b/-/pkg-b-1.0.0.tgz"
+    }
+  }
+}

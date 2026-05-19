@@ -1,0 +1,12 @@
+[
+  {
+    "ghsaId": "GHSA-already-resolved-bbbb",
+    "packageName": "resolved-pkg",
+    "installedVersion": "4.0.0",
+    "vulnerableRange": "< 4.5.0",
+    "patchedVersion": "4.5.0",
+    "severity": "HIGH",
+    "cvssScore": 7.0,
+    "summary": "Hunter saw 4.0.0 but the lockfile has since moved past 4.5.0 (stale data or prior patch session)"
+  }
+]

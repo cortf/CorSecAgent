@@ -1,0 +1,12 @@
+{
+  "name": "patcher-fixture-project",
+  "version": "1.0.0",
+  "dependencies": {
+    "lodash": "^4.17.20",
+    "wrangler": "^3.10.0",
+    "unpatched-pkg": "^1.0.0",
+    "resolved-pkg": "^4.0.0",
+    "pkg-a": "^1.0.0",
+    "pkg-b": "^1.0.0"
+  }
+}
