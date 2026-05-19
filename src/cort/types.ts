@@ -156,3 +156,76 @@ export interface AwsContextReport {
   alb: AlbContextFinding;
   imdsv2: Imdsv2Report;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Aggregator types (Slice 9)
+//
+// The aggregator merges Checkov + tfsec failed findings into a single
+// deduplicated list, and passes the AWS context report through as a separate
+// "context" field. The shapes below are the *output* of `aggregateFindings`
+// in src/cort/aggregateFindings.ts and the input shape the reporter (Slice 11)
+// will consume.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Stable categories used to deduplicate findings across scanners. The category
+// for a given check ID is looked up in a literal table in aggregateFindings.ts.
+// Unknown check IDs collapse to 'uncategorized', which is treated specially by
+// the deduplicator — uncategorized findings never deduplicate (even when they
+// share a resource) because we cannot prove two unknown IDs describe the same
+// underlying risk.
+export type FindingCategory =
+  | 'encryption-at-rest'
+  | 'encryption-in-transit'
+  | 'network-exposure'
+  | 'identity-and-access'
+  | 'logging-and-monitoring'
+  | 'secrets-management'
+  | 'uncategorized';
+
+// Unified severity scale used after normalisation. Both Checkov and tfsec
+// currently emit this exact set, so normalisation is the identity function
+// today — the type exists so that any future drift (a scanner adds INFO /
+// UNKNOWN) has a single, central seam to handle it.
+export type UnifiedSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+// A single finding after merge + dedup. When two scanners flag the same
+// (category, resource) tuple, their attributions are folded into the `sources`
+// array on a single AggregatedFinding rather than appearing as two separate
+// rows. Source attribution is preserved so the reporter can cite which
+// scanner(s) flagged a given issue.
+//
+// `severity` is the reconciled max across all sources. `description`,
+// `filePath`, and `lineRange` are taken from the highest-severity source
+// (tie-break: prefer Checkov, for stable ordering when both scanners report
+// the same severity).
+export interface AggregatedFinding {
+  category: FindingCategory;
+  severity: UnifiedSeverity;
+  resource: string;
+  filePath: string;
+  lineRange: [number, number];
+  description: string;
+  sources: Array<{
+    scanner: 'checkov' | 'tfsec';
+    ruleId: string;
+    originalSeverity: UnifiedSeverity;
+  }>;
+}
+
+// Top-level report produced by `aggregateFindings`. The `context` block carries
+// the AWS context report through unchanged — it is intentionally NOT folded
+// into `findings` because ALB presence and IMDSv2 platform-version state are
+// risk-modifying signals about the deployed environment, not finding-level
+// issues in their own right.
+export interface AggregatedReport {
+  findings: AggregatedFinding[];
+  context: {
+    alb: AlbContextFinding;
+    imdsv2: Imdsv2Report;
+  };
+  summary: {
+    totalFindings: number;
+    bySeverity: Record<UnifiedSeverity, number>;
+    byCategory: Record<FindingCategory, number>;
+  };
+}

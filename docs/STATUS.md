@@ -187,8 +187,47 @@ The Slice 9 aggregator will consume `Imdsv2Report` and decide how to surface fin
 
 ---
 
+## Slice 9 — Findings aggregator
+
+**Status:** Complete
+
+Slice 9 complete: Cort's findings aggregator with 35 new tests passing (149 total).
+
+### What was built
+
+- **`src/cort/types.ts`** — added four new exports: `FindingCategory` (7-member union, `uncategorized` fallback), `UnifiedSeverity` (alias of the LOW/MEDIUM/HIGH/CRITICAL scale, kept as a distinct seam from `CheckSeverity` / `TfsecSeverity` so any future drift has one place to land), `AggregatedFinding` (post-dedup row with `sources[]` for scanner attribution), and `AggregatedReport` (findings + `context: { alb, imdsv2 }` + summary). Header comments explain the design points (uncategorized-never-dedupes, AWS context as a separate signal not a finding).
+- **`src/cort/aggregateFindings.ts`** — pure synchronous `aggregateFindings(checkov, tfsec, aws)` producing an `AggregatedReport`. Internal pipeline: normalise each scanner's failed[] into a common `NormalizedFinding` shape, group by `(category, resource)` (uncategorized findings get unique synthetic keys so they never collide), pick a representative per group (highest-severity, Checkov-tiebreak) for description/filePath/lineRange, reconcile severity by taking the max across sources, sort deterministically (severity DESC → category alpha → resource alpha), then compute summary counts from the final list. Exports `categorizeCheckId` and `normalizeSeverity` so the helpers are testable independently.
+- **Category mapping (literal table, 18 entries)** — 11 Checkov IDs (`CKV_AWS_3/17/18/19/20/21/24/25/41/79/103`) plus 7 tfsec IDs (`AVD-AWS-0017/0028/0086/0088/0090/0107/0132`) covering all five non-fallback categories. Marked in the code as "extend as needed".
+- **`tests/aggregateFindings.test.ts`** — 35 tests across 11 `describe` blocks: category mapping (known + unknown), severity normalisation pass-through, empty inputs, single-source attribution, dedup on `(category, resource)`, severity reconciliation (MEDIUM+HIGH→HIGH, LOW+CRITICAL→CRITICAL, plus the Checkov-tiebreak / higher-severity-wins description rules), uncategorized-never-dedupes (intra-scanner and cross-scanner), AWS context passthrough, summary counts, deterministic ordering (deep-equal across runs + a literal ordering assertion), single-scanner-only inputs, and a real-fixture end-to-end block that drives `runCheckov` / `runTfsec` through their fake executors over the Slice 6 / Slice 7 fixtures and verifies the three overlapping themes (S3 encryption, IMDSv2, open SG) collapse into three deduplicated findings each with two sources.
+
+### Confirmed scope guards
+
+- **No LLM calls** — aggregator is pure code, no Anthropic SDK import.
+- **No file I/O** — `aggregateFindings` is synchronous and consumes already-parsed reports; the test file does load fixtures, but only at module-init for shape assertions, never inside `aggregateFindings` itself.
+- **No Cort entry point or workflow** — that is Slice 11.
+- **No reporting prose** — descriptions are copied through from the source scanners unchanged.
+- **`runCheckov.ts`, `runTfsec.ts`, `awsContextChecks.ts`, `src/hunter/`, `src/shared/` untouched.**
+- **Category mapping intentionally bounded** at 18 entries (slice prompt said 15-20).
+- **No regex / prefix / fuzzy categorisation** — literal table only, per the "keep it boring" guidance in the slice prompt.
+- **No weighted severity averaging or consensus-bumping** — strict max-over-sources, per the same guidance.
+
+### Deviations from the spec, with reasoning
+
+- **Spec example used tfsec long-form IDs (e.g. `aws-s3-encryption-customer-key`); the implementation uses short-form `AVD-AWS-XXXX` IDs in the mapping table.** `TfsecFinding.ruleId` is projected from the raw payload's `rule_id` field, which carries the short form (see `runTfsec.ts:105`). The long form lives at `long_id`, which the wrapper does not project. Keying the mapping on long IDs would mean every lookup misses. If we later decide to switch the wrapper to project `long_id`, the mapping keys swap — not the lookup logic. Documented in the table header comment.
+- **`normalizeSeverity` accepts `CheckSeverity | TfsecSeverity | null | undefined` and collapses null/undefined to `MEDIUM`.** The spec described normalisation as a "no-op identity function" but Checkov genuinely emits `severity: null` on community checks without a configured severity (a documented Slice 6 behaviour, preserved in `CheckovFinding.severity: CheckSeverity | null`). A pure identity would either return `null` (incompatible with `UnifiedSeverity`) or crash. Collapsing to `MEDIUM` keeps the finding visible without escalating it into the loudest bucket — same conservative-default reasoning as the wrapper's own severity fallback.
+- **Only `failed[]` findings are aggregated; `passed[]` and `skipped[]` are dropped.** The spec doesn't explicitly say this, but the aggregator's purpose is to surface issues for the reporter — passing checks are not issues, and skipped checks are deliberately suppressed by the policy author. Surfacing them would dilute the output.
+- **`AggregatedFinding.filePath` and `lineRange` come from the representative source (highest-severity, Checkov-tiebreak).** The spec specified the description tie-break rule but did not address filePath/lineRange directly. Using the representative for all three fields keeps a single coherent "spokesperson source" model rather than mixing fields from multiple sources, which would invite confusion when the file paths differ (which they do in our fixtures — see uncertainty note below).
+
+### Uncertainty about external system shapes
+
+- **The Checkov and tfsec fixtures use different `file_path` conventions:** Checkov emits `/s3.tf` (project-relative-ish), tfsec emits `/repo/terraform/s3.tf` (workspace-absolute-ish). This is fixture-level — in production both tools run against the same workspace and should produce paths in the same convention — but it means the aggregator's `filePath` field reflects the representative source's path. If the two scanners genuinely use different path conventions when run side-by-side in CI (rather than just in our fixtures), the same finding may appear at slightly different paths depending on which scanner won the tie-break. Worth verifying against a real Terraform repo in Slice 11.
+- **Category mapping completeness:** the 18 entries cover the fixtures and a small set of well-known checks, but I made judgment calls on a few. `CKV_AWS_18` (S3 access logging) is mapped to `logging-and-monitoring` rather than `network-exposure` even though access logging is sometimes framed as a forensics / public-exposure mitigation. `CKV_AWS_21` (S3 versioning) is mapped to `logging-and-monitoring` even though it is closer to "data protection / recovery" — there is no dedicated category for that, so this is the closest fit. These should be revisited if Slice 11's reporter output reads awkwardly when describing them.
+- **tfsec AVD-AWS code stability:** I used IDs verified against the fixture (`AVD-AWS-0028`, `0088`, `0090`, `0107`) plus a few I believe are correct from memory (`AVD-AWS-0017`, `0086`, `0132`). If any of the memory-sourced codes are wrong, the mapping will silently fall back to `uncategorized` for those rules — visible behaviour rather than a crash, but the mapping won't actually fire until corrected.
+
+---
+
 ## Upcoming
 
-### Slice 9 — Findings aggregator
+### Slice 10 — Patch-and-test step
 
-Goal: aggregator that consumes Checkov + tfsec + AWS context reports and produces a unified deduplicated findings structure.
+Goal: consume Hunter's `matches.json` and produce a hotfix branch with `npm install` upgrades and passing tests.
