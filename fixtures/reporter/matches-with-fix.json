@@ -1,0 +1,12 @@
+[
+  {
+    "ghsaId": "GHSA-cfph-4qqh-w828",
+    "packageName": "wrangler",
+    "installedVersion": "3.10.0",
+    "vulnerableRange": ">= 3.0.0, < 3.20.0",
+    "patchedVersion": "3.20.0",
+    "severity": "HIGH",
+    "cvssScore": 7.5,
+    "summary": "Wrangler exposes environment variables via dev server endpoint."
+  }
+]

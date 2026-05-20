@@ -1,0 +1,56 @@
+{
+  "findings": [
+    {
+      "category": "encryption-at-rest",
+      "severity": "HIGH",
+      "resource": "aws_s3_bucket.app_logs",
+      "filePath": "/repo/terraform/s3.tf",
+      "lineRange": [12, 28],
+      "description": "S3 bucket lacks server-side encryption configuration.",
+      "sources": [
+        {
+          "scanner": "checkov",
+          "ruleId": "CKV_AWS_19",
+          "originalSeverity": "HIGH"
+        },
+        {
+          "scanner": "tfsec",
+          "ruleId": "AVD-AWS-0088",
+          "originalSeverity": "HIGH"
+        }
+      ]
+    }
+  ],
+  "context": {
+    "alb": {
+      "albCount": 2,
+      "albArns": [
+        "arn:aws:elasticloadbalancing:us-east-1:111111111111:loadbalancer/app/web/abc",
+        "arn:aws:elasticloadbalancing:us-east-1:111111111111:loadbalancer/app/api/def"
+      ]
+    },
+    "imdsv2": {
+      "checked": [],
+      "compliantCount": 3,
+      "nonCompliantCount": 0
+    }
+  },
+  "summary": {
+    "totalFindings": 1,
+    "bySeverity": {
+      "LOW": 0,
+      "MEDIUM": 0,
+      "HIGH": 1,
+      "CRITICAL": 0
+    },
+    "byCategory": {
+      "encryption-at-rest": 1,
+      "encryption-in-transit": 0,
+      "network-exposure": 0,
+      "identity-and-access": 0,
+      "logging-and-monitoring": 0,
+      "secrets-management": 0,
+      "uncategorized": 0
+    }
+  }
+}

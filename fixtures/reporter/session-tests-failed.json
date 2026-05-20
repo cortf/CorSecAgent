@@ -1,0 +1,22 @@
+{
+  "branchName": "corsec/hotfix/1747555201",
+  "results": [
+    {
+      "packageName": "wrangler",
+      "previousVersion": "3.10.0",
+      "targetVersion": "3.25.0",
+      "installedVersion": "3.25.0",
+      "status": "patched-tests-failed",
+      "relatedMatches": ["GHSA-f8mp-x433-5wpf"],
+      "testOutput": "FAIL test/integration/wrangler.test.ts > wrangler upload fails on new validator",
+      "errorMessage": null
+    }
+  ],
+  "summary": {
+    "attempted": 1,
+    "succeeded": 0,
+    "failedTests": 1,
+    "failedInstall": 0,
+    "noFixAvailable": 0
+  }
+}

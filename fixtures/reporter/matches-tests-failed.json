@@ -1,0 +1,12 @@
+[
+  {
+    "ghsaId": "GHSA-f8mp-x433-5wpf",
+    "packageName": "wrangler",
+    "installedVersion": "3.10.0",
+    "vulnerableRange": ">= 3.0.0",
+    "patchedVersion": "3.25.0",
+    "severity": "MODERATE",
+    "cvssScore": 5.4,
+    "summary": "Wrangler local proxy bypasses authentication header validation."
+  }
+]

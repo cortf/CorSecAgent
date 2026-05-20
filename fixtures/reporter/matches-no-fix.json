@@ -1,0 +1,12 @@
+[
+  {
+    "ghsaId": "GHSA-xxxx-yyyy-zzzz",
+    "packageName": "leftpad-fork",
+    "installedVersion": "1.0.0",
+    "vulnerableRange": ">= 0.0.0",
+    "patchedVersion": null,
+    "severity": "MODERATE",
+    "cvssScore": null,
+    "summary": "Prototype pollution in leftpad-fork (no fix released)."
+  }
+]

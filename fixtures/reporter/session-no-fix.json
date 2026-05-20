@@ -1,0 +1,22 @@
+{
+  "branchName": "corsec/hotfix/1747555202",
+  "results": [
+    {
+      "packageName": "leftpad-fork",
+      "previousVersion": "1.0.0",
+      "targetVersion": null,
+      "installedVersion": null,
+      "status": "patch-failed-no-fix-available",
+      "relatedMatches": ["GHSA-xxxx-yyyy-zzzz"],
+      "testOutput": null,
+      "errorMessage": null
+    }
+  ],
+  "summary": {
+    "attempted": 0,
+    "succeeded": 0,
+    "failedTests": 0,
+    "failedInstall": 0,
+    "noFixAvailable": 1
+  }
+}

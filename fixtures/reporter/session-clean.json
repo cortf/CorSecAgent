@@ -1,0 +1,22 @@
+{
+  "branchName": "corsec/hotfix/1747555203",
+  "results": [
+    {
+      "packageName": "lodash",
+      "previousVersion": "4.17.20",
+      "targetVersion": "4.17.21",
+      "installedVersion": "4.17.21",
+      "status": "patched-tests-passed",
+      "relatedMatches": ["GHSA-aaaa-bbbb-cccc"],
+      "testOutput": null,
+      "errorMessage": null
+    }
+  ],
+  "summary": {
+    "attempted": 1,
+    "succeeded": 1,
+    "failedTests": 0,
+    "failedInstall": 0,
+    "noFixAvailable": 0
+  }
+}

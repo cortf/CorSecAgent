@@ -1,0 +1,34 @@
+{
+  "findings": [],
+  "context": {
+    "alb": {
+      "albCount": 1,
+      "albArns": [
+        "arn:aws:elasticloadbalancing:us-east-1:111111111111:loadbalancer/app/web/abc"
+      ]
+    },
+    "imdsv2": {
+      "checked": [],
+      "compliantCount": 1,
+      "nonCompliantCount": 0
+    }
+  },
+  "summary": {
+    "totalFindings": 0,
+    "bySeverity": {
+      "LOW": 0,
+      "MEDIUM": 0,
+      "HIGH": 0,
+      "CRITICAL": 0
+    },
+    "byCategory": {
+      "encryption-at-rest": 0,
+      "encryption-in-transit": 0,
+      "network-exposure": 0,
+      "identity-and-access": 0,
+      "logging-and-monitoring": 0,
+      "secrets-management": 0,
+      "uncategorized": 0
+    }
+  }
+}

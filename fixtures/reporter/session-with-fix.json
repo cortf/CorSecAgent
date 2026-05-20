@@ -1,0 +1,22 @@
+{
+  "branchName": "corsec/hotfix/1747555200",
+  "results": [
+    {
+      "packageName": "wrangler",
+      "previousVersion": "3.10.0",
+      "targetVersion": "3.20.0",
+      "installedVersion": "3.20.1",
+      "status": "patched-tests-passed",
+      "relatedMatches": ["GHSA-cfph-4qqh-w828"],
+      "testOutput": null,
+      "errorMessage": null
+    }
+  ],
+  "summary": {
+    "attempted": 1,
+    "succeeded": 1,
+    "failedTests": 0,
+    "failedInstall": 0,
+    "noFixAvailable": 0
+  }
+}

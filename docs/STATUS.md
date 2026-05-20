@@ -271,8 +271,51 @@ Per the slice prompt's explicit ask to flag uncertainty about npm/git invocation
 
 ---
 
+## Slice 11 — LLM reporter
+
+**Status:** Complete
+
+Slice 11 complete: the Reporter consumes Hunter's matches, Cort's aggregated report, and the Patcher's session, and produces a five-section PR description. Template-only fallback when the case is trivial; single LLM call otherwise. 22 new tests, 184 total passing.
+
+### What was built
+
+- **`src/reporter/prompts/pr-description.md`** — version-controlled system prompt (~3.1 KB, ≈780 tokens). Defines the senior-security-engineer role, the strict five-header output schema (`## Risk Summary`, `## Affected Dependencies`, `## Patches Applied`, `## Infrastructure Hardening`, `## Test Results` — in that order, every header mandatory, "None." when empty), the input JSON shape, the per-section guidance (≤100 words each), and the "do not invent facts" rule. No marketing language; direct tense only.
+- **`src/shared/llmClient.ts`** — `LLMClient` interface plus two implementations: `AnthropicLLMClient` (constructs an `Anthropic` SDK client, requires `ANTHROPIC_API_KEY` env var, logs `[llm-cost] input=N output=M model=X` to stdout on every successful call) and `FakeLLMClient` (canned-response, records all calls in a public `calls` array). Wrapper accepts an injectable `AnthropicSDKLike` shape so the wrapper's own unit tests can drive it without a real API key.
+- **`src/reporter/composePR.ts`** — `composePR(opts, llmClient?)`. Loads all three inputs in parallel, picks mode (`template` | `llm`), assembles the trimmed payload for the LLM branch, calls the client, and validates the five required headers appear in order before writing. Exports a `__testing` object so unit tests can exercise `decideMode` / `renderTemplate` / `validateSections` without round-tripping through the file system.
+- **Mode-decision logic.** Template-only when ALL: every patch result is `patched-tests-passed`, Cort findings array empty, IMDSv2 has zero non-compliant services, AND (no Fargate services OR at least one ALB present). LLM mode on ANY: tests failed, install error, no-fix-available, or skipped-already-resolved; Cort has findings; IMDSv2 non-compliant; or Fargate services exist but no ALBs. Decision logged as `[reporter] mode=template` or `[reporter] mode=llm` for workflow observability.
+- **Payload trimming.** The LLM-mode user message is a single JSON object with three top-level keys (`vulnerabilities`, `infrastructure`, `patches`). Every input is stripped to the minimum: matches drop `installedVersion`/`vulnerableRange`/`patchedVersion`; Cort findings keep `category`/`severity`/`resource`/`description`/`sources[{scanner,ruleId}]`; patches drop `testOutput`/`errorMessage`/`targetVersion`. Serialized payload is asserted < 6000 chars before the call is made; over-budget throws and never invokes the LLM.
+- **Output validation.** `validateSections` walks the markdown with a forward cursor checking each required header appears in order. Missing or out-of-order headers throw with the offending header named — the validator does not attempt to repair LLM output. (Retry behaviour is intentionally Slice 12's call.)
+- **`fixtures/reporter/`** — twelve fixtures across four scenarios: `with-fix` (passing patch + Cort finding → LLM mode), `tests-failed` (broken tests → LLM mode), `no-fix` (unpatchable vuln → LLM mode), `clean` (passing patch + empty Cort → template mode). Three files per scenario (`matches-*.json`, `cort-report-*.json`, `session-*.json`) so the full input triple is realistic, not synthetic.
+- **`tests/composePR.test.ts`** — 22 tests across six describe blocks: `decideMode` (template triggers, every LLM trigger including the missing-ALB case), `validateSections` (well-formed accepted, missing-section rejected, out-of-order rejected), template-mode end-to-end (no LLM calls, all five headers, output written to disk, headers in order), LLM-mode end-to-end (system prompt matches the template file, user message contains only the three trimmed keys, `testOutput`/`errorMessage` stripped, model + max_tokens correct, malformed response rejected), payload-budget assertion (over-6000-char throws and never calls the LLM), and `AnthropicLLMClient` wrapper (cost-log emitted, missing `ANTHROPIC_API_KEY` throws, multi-block text concatenated).
+
+### Confirmed scope guards
+
+- **No workflow YAML changes** — `.github/workflows/` untouched.
+- **No PR creation, no GitHub API calls** — `composePR` writes a local markdown file and returns its contents. Pushing the branch and opening the PR is Slice 12.
+- **No retries on LLM failure** — failures bubble up; the orchestrator decides whether to retry.
+- **Exactly one LLM call** — the Reporter invokes the client at most once per run, never loops or chains.
+- **`src/hunter/`, `src/cort/`, `src/patcher/`, `src/shared/semverRange.ts` untouched** — `composePR` only imports types from those modules; no edits.
+- **Hunter extraction LLM call** (mentioned in CLAUDE.md hard rules) NOT touched — that's a separate future slice if unstructured-source ingestion lands.
+- **Real Anthropic API never hit in CI** — `FakeLLMClient` injected on every Reporter end-to-end test; the `AnthropicLLMClient` wrapper test stubs the SDK shape.
+
+### Deviations from the spec, with reasoning
+
+- **Model string substituted.** The slice prompt specified `claude-sonnet-4-7-20250228` as a placeholder. There is no Sonnet 4.7 release; the current Sonnet model identifier is `claude-sonnet-4-6`. The constant `REPORTER_MODEL` in `composePR.ts` is the only place this string lives, so future catalogue advances are a one-line edit. Flagged here per the slice prompt's explicit final item ("verify the current Anthropic SDK model string for Sonnet 4.7 — if your version differs from what I specified, use the correct one and flag the substitution").
+- **Template-only mode also fires on the empty-account degenerate case.** The spec implied a strict "Cort empty AND every patch passed" rule; we added the ALB-presence nuance for accounts that actually have Fargate workloads. The reasoning is that ALB presence is a positive risk-modifying signal (defense in depth via WAF, SSL termination, centralised auth), so a service-bearing account with zero ALBs is a hardening signal worth narrating. An empty account (zero Fargate services AND zero ALBs) is treated as a wash — template wins. This is one extra branch in `decideMode`, not a structural change.
+- **`AnthropicLLMClient` accepts an injectable SDK shape.** The slice prompt described the real client as wrapping the SDK directly. The wrapper's own unit tests need to drive it without an `ANTHROPIC_API_KEY` (else the test environment must carry a real key just to typecheck the log-line format), so the constructor accepts an optional `AnthropicSDKLike` and only requires the env var when one is not provided. The production path is unchanged — callers who construct `new AnthropicLLMClient()` still go through the env var check.
+- **Template output uses "None." consistently** for empty sections rather than omitting them or using "N/A". The spec said the LLM must write "None." for empty sections; we mirrored that in the template renderer so both modes produce output with the same shape (one validator, one parser downstream).
+- **`renderTemplate` references `relatedMatches[]` in `Affected Dependencies`** rather than reaching back to the matches.json. The Patcher already consolidated the GHSAs onto each PatchResult, and the template path has no need to re-load matches — keeping the template renderer dependent on only the PatchSession is simpler and matches the spec's "deterministic markdown using the Patcher's data" hint.
+
+### Uncertainty about external system shapes
+
+- **Anthropic SDK model union.** The installed SDK version (`@anthropic-ai/sdk ^0.39.0`) lists Sonnet IDs only up through `claude-3-7-sonnet-latest` in its `Model` type union, but the union ends with `| (string & {})` — any string is accepted, the SDK does not validate the model name client-side. The model string is sent verbatim to the API, which is what does the actual validation. If `claude-sonnet-4-6` is wrong at runtime, the workflow will see a 4xx and we update the constant. This is the model-string risk the slice prompt explicitly asked us to verify; the failure mode is loud (HTTP error), not silent.
+- **Real-API token-count log line never exercised in CI.** The `AnthropicLLMClient` wrapper test uses a stub SDK to verify the log format. The first time the real API is hit will be the first time the actual `input_tokens` / `output_tokens` shape on `response.usage` is verified against ground truth. The SDK's `Usage` type does declare both as `number`, so this should be safe, but the cost line is the artefact Slice 12's workflow will grep for — worth eyeballing the first real run before relying on it.
+- **Prompt template token count is a heuristic.** The 4-chars-per-token rule of thumb puts the prompt at ≈780 tokens (under the 800-token budget). The actual count will depend on the BPE tokeniser the model uses; if it comes in over-budget, the most expensive sections are the section guidance and the "do not invent" enumeration. The slice prompt asked for "under 800 tokens of instructions" so this is on-target but not verified against a tokeniser.
+
+---
+
 ## Upcoming
 
-### Slice 11 — LLM reporter
+### Slice 12 — orchestrated workflow + PR creation
 
-Goal: single Anthropic API call that consumes Hunter's `matches.json` + Cort's `AggregatedReport` + the patcher's `PatchSession`, and produces the PR description markdown. This is the second (and last) sanctioned LLM touchpoint in the pipeline.
+Goal: wire Hunter → Cort → Patcher → Reporter into a single GitHub Actions workflow that runs on schedule, pushes the patch branch, opens (or updates) a real Pull Request with the Reporter's markdown, and reports cost / outcomes back to the workflow summary.
