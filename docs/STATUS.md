@@ -314,8 +314,70 @@ Slice 11 complete: the Reporter consumes Hunter's matches, Cort's aggregated rep
 
 ---
 
+## Slice 12 — integrated workflow + PR creation
+
+**Status:** Complete
+
+Slice 12 complete: Hunter → Cort → Patcher → Reporter wired into a single
+GitHub Actions workflow with graceful per-stage degradation, OIDC-backed AWS
+auth, and a dry-run-first deployment posture. 8 new tests, **192 total
+passing**. The autonomous pipeline is now feature-complete in dry-run mode.
+
+### What was built
+
+- **`src/orchestrate.ts`** — Node entry script invokable as `npx tsx src/orchestrate.ts`. Exposes `orchestrate(opts, stages?)` (the unit-test seam, with every stage injectable) and a CLI wrapper guarded by the `process.argv[1] === fileURLToPath(import.meta.url)` idiom. CLI flags match the slice spec exactly (`--working-dir`, `--output-dir`, `--test-command`, `--terraform-dir`, `--dry-run`, `--ecosystem`). Internal pipeline: Hunter (abort on throw or empty) → Cort (Promise.allSettled across Checkov + tfsec + AWS context; each scanner independently degrades to an empty report; aggregator produces an `AggregatedReport` even when every sub-stage fails) → Patcher (throw is captured into a synthetic empty `PatchSession` written to disk so the Reporter can still read it) → Reporter (throw is logged and the run exits 1, but every upstream artefact is preserved). The summary file is **always** written before exit — including on the early-abort paths — so the workflow can upload it even on failure.
+- **`TokenAccumulator`** wraps the LLM client so the orchestrator can capture input/output token totals across the run for the summary's `llmTokens` field. Reporter only invokes the client when its `decideMode` picks `'llm'`; if the API key is missing AND the LLM branch isn't taken, the run still succeeds via template mode.
+- **`.github/workflows/corsec-pipeline.yml`** — single-job workflow on `0 */6 * * *` cron plus `workflow_dispatch` (inputs: `dry_run` default `true`, `terraform_dir` optional). Steps: checkout → setup Node 20 (with npm cache) → setup Python 3.12 → `pip install checkov` → install tfsec via the official `install_linux.sh` script → `aws-actions/configure-aws-credentials@v4` (OIDC) → `npm ci` → run orchestrator → upload artifacts (always, including on failure) → determine PR-creation eligibility (gated on `!dry_run` AND `patch-session.json` containing ≥ 1 `patched-tests-passed` result) → `peter-evans/create-pull-request@v6` with `branch` / `title` / `body-path` / `labels` / `commit-message` matching the spec → write a markdown job summary (dry-run flag, exit code, match count, LLM tokens, per-stage duration table).
+- **`tests/orchestrate.test.ts`** — 8 tests across 8 `describe` blocks covering every degradation path required by the slice prompt: empty Hunter result (no later stages invoked, exit 0); Hunter throws (exit 1, no later stages, summary written); single Cort scanner fails (other scanners still run, pipeline continues, sub-stage attribution captured); Patcher throws (synthetic empty session written, Reporter still runs); Reporter throws (exit 1 but all upstream artefacts preserved); no `--terraform-dir` provided (Cort entirely skipped, empty AggregatedReport persisted, Reporter still runs); stage timing captured with a stub clock; summary file shape (branchName, dryRun, llmTokens persisted correctly).
+- **`README.md`** — new top-level README with a "Deployment" section covering: required GitHub Actions secrets (`ANTHROPIC_API_KEY`, `AWS_AUDIT_ROLE_ARN`, `GITHUB_TOKEN` auto-provided), the AWS OIDC trust-policy `StringLike` snippet (with a link to AWS's canonical docs rather than reproducing the full policy), minimal read-only IAM permissions (`elasticloadbalancing:DescribeLoadBalancers`, `ecs:ListClusters` / `ListServices` / `DescribeServices`), the dry-run-first deployment recommendation (at least a week of dry-run inspection before flipping `dry_run: false`), and a per-artifact table.
+
+### Confirmed scope guards
+
+- **No new modules other than `src/orchestrate.ts` + `tests/orchestrate.test.ts`** — Hunter, Cort, Patcher, Reporter source files untouched. The orchestrator only imports their public functions/types; no edits to those modules.
+- **No changes to `src/hunter/`, `src/cort/`, `src/patcher/`, `src/reporter/`, `src/shared/`** beyond importing from them.
+- **No retries on any stage.** Each stage runs at most once; failure modes are captured into the summary and the next stage's behaviour follows the degradation rules in the slice prompt.
+- **Cron schedule is exactly `0 */6 * * *`** — not configurable.
+- **Single-job workflow** — no multi-job orchestration with artifact passing.
+- **Dry-run is the default.** PR creation is gated on `inputs.dry_run == false` AND the patch session having at least one `patched-tests-passed` result; every other step runs identically in both modes.
+- **No LLM calls added** — orchestrator only invokes the existing Reporter, which still makes at most one LLM call per run.
+- **No CLAUDE.md hard-rule violations** — no direct `semver` calls (none added), no LLM calls outside the Reporter, no Checkov/tfsec config in `src/`.
+
+### Deviations from the spec, with reasoning
+
+- **Synthetic `PatchSession` does NOT carry an `errorMessage` field.** The slice prompt said to write "a synthetic PatchSession with `attempted: 0` and an `errorMessage`". The `PatchSession` type has no `errorMessage` slot (see `src/patcher/types.ts:48-61`); adding one would mean editing a Slice 10 file, which the scope guards forbid ("no changes to Hunter, Cort, Patcher, or Reporter source files"). Instead, the patcher's error message is surfaced via the orchestrator's per-stage `StageRecord.errorMessage`, which the workflow's job-summary step displays. The synthetic session's `branchName` is preserved so the Reporter can still describe it correctly. The `synthEmptyPatchSession` helper takes the message as a parameter (and discards it via `void`) so the intent is documented at the call site.
+- **CLI accepts `--working-dir` defaulting to `"."`** — the spec listed this flag but didn't specify the default; `"."` matches how the existing `src/hunter/run.ts` defaults `--package-json` to `./package.json`.
+- **Workflow installs tfsec via the documented `install_linux.sh` script rather than `aquasecurity/tfsec-action@v1.0.3`.** The action runs a full scan as a side effect; we only need the binary on PATH. Installing via the script is the more reliable / minimal of the two options the slice prompt offered.
+- **`continue-on-error: true` is not used anywhere in the workflow.** The slice prompt mentioned it generically; in practice the orchestrator handles every stage's failure internally (per the test matrix above) and writes the summary file unconditionally, so the only way the orchestrator step exits non-zero is when Hunter or Reporter genuinely failed — both of which we WANT to surface as a failing job (the artifact upload step still runs thanks to `if: always()`). Using `continue-on-error` would mask real failures.
+- **Workflow has `permissions: contents: write, pull-requests: write`** in addition to `id-token: write`. The slice prompt mentioned only OIDC; `peter-evans/create-pull-request@v6` requires the `contents` and `pull-requests` write scopes to push the branch and open the PR. Both are scoped at the job level, not globally.
+- **`OrchestrationStages` includes `llmClient?: LLMClient`** as an injectable, not just the four stage functions. The orchestrator needs to wrap whatever LLM client `composePR` will use in a `TokenAccumulator` to surface input/output totals in the summary; tests inject a recording fake so token totals are deterministic and no API key is needed.
+- **Reporter token accounting uses a wrapper, not stdout parsing.** The Reporter logs `[llm-cost] input=N output=M model=X` to stdout (Slice 11), but parsing that line would couple the orchestrator to a log format. Wrapping the `LLMClient` interface is the clean seam.
+
+### Uncertainty about external system shapes
+
+Per the slice prompt's explicit asks:
+
+- **`peter-evans/create-pull-request@v6` input names** — verified against the action's v6 README. The names used in the workflow (`branch`, `title`, `body-path`, `labels`, `commit-message`) match v6's documented inputs. The action treats `branch` as the branch to push to / open the PR from; `labels` is a newline-separated list (we use the multi-line YAML block form, which the action's input parser accepts). The action self-handles the "branch already exists → update" flow via its `--force` option, which defaults to off — meaning re-runs against the same branch will commit-and-amend rather than overwriting. If we ever need the destructive form, the input is `force: true`.
+- **`tfsec install_linux.sh` URL** — `https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh` is the canonical installer documented in tfsec's README. The `tfsec --version` check after install will fail loudly if the script ever moves; this is the failure mode we want (rather than a silent skip).
+- **AWS OIDC trust-policy shape** — flagged explicitly per the slice prompt. I provided the `StringEquals` (audience) + `StringLike` (sub) snippet that is the load-bearing security control, but **deliberately did not write a full trust-policy JSON**. The full policy requires a `Principal.Federated` ARN that includes the AWS account ID and the OIDC provider thumbprint configuration, both of which vary per deployment. The README links to AWS's canonical guide for the full setup. Anyone deploying this should follow that guide rather than copy-pasting from CorSec docs.
+- **`aws-actions/configure-aws-credentials@v4` and `actions/setup-python@v5` versions** — both are current major versions of widely-used official actions. No verified-against-ground-truth concern.
+- **`OrchestrationSummary.llmTokens` always sums to zero in template mode** — by design (the LLM is never called), but flagged because the workflow's job-summary table will show `input=0 output=0` for every clean dry-run run. That's an informative signal, not a bug.
+- **The CLI guard for empty `--terraform-dir`** treats `""` as "not provided". This handles the shell expansion `${{ inputs.terraform_dir || '' }}` in the workflow producing an empty string when the input wasn't set. Without this guard, Cort's directory pre-flight would fail because `runCheckov`/`runTfsec` would be called with `""`.
+
+### After this slice
+
+There is no Slice 13. The next steps are deployment, observation, and
+iteration — see the "Dry-run-first deployment" section of `README.md`. The
+pipeline either becomes trusted infrastructure that catches real issues for
+years, or it becomes a noisy ignored bot within a month. The difference is
+the first three weeks of careful, attentive, dry-run observation.
+
+---
+
 ## Upcoming
 
-### Slice 12 — orchestrated workflow + PR creation
+### Real-world deployment
 
-Goal: wire Hunter → Cort → Patcher → Reporter into a single GitHub Actions workflow that runs on schedule, pushes the patch branch, opens (or updates) a real Pull Request with the Reporter's markdown, and reports cost / outcomes back to the workflow summary.
+- Push to GitHub; configure `ANTHROPIC_API_KEY` and `AWS_AUDIT_ROLE_ARN` secrets; set up the AWS OIDC role per the README.
+- Run the workflow manually via `workflow_dispatch` with `dry_run: true`. Inspect every artifact — especially `pr-description.md` — like a code review.
+- Let the six-hourly cron run for at least a week in dry-run mode. Watch the `[llm-cost]` log line for token-budget drift, watch the job summary's stage-duration table for flakiness, watch the Reporter validator for missing-section failures.
+- After a clean week, flip `dry_run` to `false` for a manual run. Watch the first real PR get opened. Merge it after human review. Calibrate over a handful of real PRs before considering label-based auto-merge.

@@ -1,0 +1,158 @@
+name: CorSec Pipeline
+
+# Runs Hunter → Cort → Patcher → Reporter end-to-end. In dry-run mode (the
+# default) every artifact is produced and uploaded but no branch is pushed
+# and no PR is opened. Flip dry_run: false only after at least a week of
+# clean dry-run observation — see README.md "Deployment" section.
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "If true (default), produce artifacts only. Set false to push branch + open PR."
+        required: false
+        type: boolean
+        default: true
+      terraform_dir:
+        description: "Optional Terraform directory for Cort scans. Empty disables Cort."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  # OIDC token issuance (federated identity with the AWS role)
+  id-token: write
+  # peter-evans/create-pull-request needs to push the branch + open the PR
+  contents: write
+  pull-requests: write
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Setup Python (for Checkov)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Checkov
+        run: pip install checkov
+
+      - name: Install tfsec
+        # Official installer. The aquasecurity/tfsec-action runs a scan as
+        # part of the step; we only need the binary on PATH, so we install
+        # via the documented script instead.
+        run: |
+          curl -sSL https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh \
+            | bash
+          tfsec --version
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_AUDIT_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Run CorSec orchestrator
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          mkdir -p .corsec
+          npx tsx src/orchestrate.ts \
+            --output-dir .corsec \
+            --ecosystem NPM \
+            ${{ inputs.terraform_dir != '' && format('--terraform-dir {0}', inputs.terraform_dir) || '' }} \
+            ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corsec-artifacts
+          path: |
+            .corsec/*.json
+            .corsec/pr-description.md
+          if-no-files-found: warn
+
+      - name: Determine PR-creation eligibility
+        id: pr_gate
+        # PR is opened only when: dry_run=false AND patch-session.json has at
+        # least one patched-tests-passed result. The orchestrator always
+        # writes the file (synthetic on failure), so jq's existence check is
+        # safe.
+        run: |
+          DRY_RUN="${{ inputs.dry_run }}"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "should_open_pr=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping PR creation: dry_run=true."
+            exit 0
+          fi
+
+          if [ ! -f .corsec/patch-session.json ]; then
+            echo "should_open_pr=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping PR creation: patch-session.json not found."
+            exit 0
+          fi
+
+          PASSED_COUNT=$(jq '[.results[] | select(.status == "patched-tests-passed")] | length' \
+            .corsec/patch-session.json)
+          if [ "$PASSED_COUNT" -gt 0 ]; then
+            BRANCH=$(jq -r '.branchName' .corsec/patch-session.json)
+            echo "should_open_pr=true" >> "$GITHUB_OUTPUT"
+            echo "passed_count=$PASSED_COUNT" >> "$GITHUB_OUTPUT"
+            echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_open_pr=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping PR creation: zero patched-tests-passed results."
+          fi
+
+      - name: Create pull request
+        if: steps.pr_gate.outputs.should_open_pr == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: ${{ steps.pr_gate.outputs.branch }}
+          title: "[CorSec] Security patches: ${{ steps.pr_gate.outputs.passed_count }} packages updated"
+          body-path: .corsec/pr-description.md
+          labels: |
+            security
+            automated
+          commit-message: |
+            chore(security): apply patches from CorSec scan
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## CorSec Pipeline Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Dry run:** ${{ inputs.dry_run }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f .corsec/orchestration-summary.json ]; then
+            echo "- **Exit code:** $(jq -r '.finalExitCode' .corsec/orchestration-summary.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Match count:** $(jq -r '.matchCount' .corsec/orchestration-summary.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **LLM tokens:** input=$(jq -r '.llmTokens.input' .corsec/orchestration-summary.json), output=$(jq -r '.llmTokens.output' .corsec/orchestration-summary.json)" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Stage durations" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Stage | Status | Duration (ms) |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| --- | --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.stages[] | "| \(.name) | \(.status) | \(.durationMs) |"' \
+              .corsec/orchestration-summary.json >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "_orchestration-summary.json not produced — orchestrator did not run to completion._" >> "$GITHUB_STEP_SUMMARY"
+          fi
