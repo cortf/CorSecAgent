@@ -33,14 +33,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    # Mapped to a job-level env so it can be referenced in a step `if:` —
+    # the `secrets` context is not available in `if:` expressions, but `env`
+    # is. When the secret is unset this is the empty string.
+    env:
+      AWS_AUDIT_ROLE_ARN: ${{ secrets.AWS_AUDIT_ROLE_ARN }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node 20
+      - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Setup Python (for Checkov)
@@ -61,9 +67,15 @@ jobs:
           tfsec --version
 
       - name: Configure AWS credentials (OIDC)
+        # Cort's AWS-context checks are optional. Without the audit role secret
+        # there are no credentials to assume, so we skip this step rather than
+        # fail the whole run. The orchestrator already degrades gracefully:
+        # awsContextChecks only runs when --terraform-dir is set, and any
+        # failure inside it is captured (Promise.allSettled) without aborting.
+        if: env.AWS_AUDIT_ROLE_ARN != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_AUDIT_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_AUDIT_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Install npm dependencies

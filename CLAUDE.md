@@ -8,7 +8,7 @@ Hybrid cybersecurity automation pipeline. Two logical modules:
 
 ## Stack
 
-- TypeScript (strict), Node 20, tsx for execution
+- TypeScript (strict), Node 22, tsx for execution
 - GitHub Actions for orchestration (no local runtime)
 - Anthropic SDK for the two LLM touchpoints (extraction + report)
 - Testing: vitest
