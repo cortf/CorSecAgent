@@ -58,12 +58,20 @@ jobs:
         run: pip install checkov
 
       - name: Install tfsec
-        # Official installer. The aquasecurity/tfsec-action runs a scan as
-        # part of the step; we only need the binary on PATH, so we install
-        # via the documented script instead.
+        # Download a PINNED release binary directly instead of the upstream
+        # install_linux.sh script. That script first queries the GitHub API for
+        # the "latest" release, which is unauthenticated and gets rate-limited
+        # on shared runner IPs — the lookup returns empty and the download URL
+        # collapses to "File to download not supplied". (tfsec is also archived
+        # in favour of Trivy, so the script is no longer maintained.) A direct
+        # release-asset download avoids the API entirely.
+        env:
+          TFSEC_VERSION: v1.28.14
         run: |
-          curl -sSL https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh \
-            | bash
+          curl -sSL -o tfsec \
+            "https://github.com/aquasecurity/tfsec/releases/download/${TFSEC_VERSION}/tfsec-linux-amd64"
+          chmod +x tfsec
+          sudo mv tfsec /usr/local/bin/tfsec
           tfsec --version
 
       - name: Configure AWS credentials (OIDC)
