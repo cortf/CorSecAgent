@@ -8,15 +8,18 @@
       "installedVersion": null,
       "status": "patch-failed-no-fix-available",
       "relatedMatches": ["GHSA-xxxx-yyyy-zzzz"],
-      "testOutput": null,
       "errorMessage": null
     }
   ],
+  "testRun": null,
   "summary": {
-    "attempted": 0,
-    "succeeded": 0,
-    "failedTests": 0,
-    "failedInstall": 0,
-    "noFixAvailable": 1
+    "total": 1,
+    "byStatus": {
+      "patched-tests-passed": 0,
+      "patched-tests-failed": 0,
+      "patch-failed-install-error": 0,
+      "patch-failed-no-fix-available": 1,
+      "skipped-already-resolved": 0
+    }
   }
 }

@@ -141,23 +141,29 @@ function emptyAwsContextReport(): AwsContextReport {
   };
 }
 
-function synthEmptyPatchSession(branchName: string, errorMessage: string): PatchSession {
+// Stand-in session persisted when the Patcher throws, so the Reporter can still
+// read a well-formed patch-session.json off disk.
+//
+// It takes no error message: PatchSession has no slot for one, and the previous
+// signature accepted the message only to discard it with `void`. The underlying
+// error is recorded on the patcher stage record, which is what the workflow's
+// job summary actually reads.
+function synthEmptyPatchSession(branchName: string): PatchSession {
   return {
     branchName,
     results: [],
+    testRun: null,
     summary: {
-      attempted: 0,
-      succeeded: 0,
-      failedTests: 0,
-      failedInstall: 0,
-      noFixAvailable: 0,
+      total: 0,
+      byStatus: {
+        'patched-tests-passed': 0,
+        'patched-tests-failed': 0,
+        'patch-failed-install-error': 0,
+        'patch-failed-no-fix-available': 0,
+        'skipped-already-resolved': 0,
+      },
     },
   };
-  // errorMessage is intentionally NOT placed on a PatchSession field — the
-  // type has no slot for one. We surface the underlying error via the stage
-  // record's errorMessage; that's what the workflow / summary look at.
-  // (Kept the parameter so callers can document intent at the call site.)
-  void errorMessage;
 }
 
 // Build a drop-in replacement for `fetchRecentAdvisories` that reads a recorded
@@ -370,7 +376,7 @@ export async function orchestrate(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const synthBranch = `corsec/hotfix/${Math.floor(now() / 1000)}`;
-    patchSession = synthEmptyPatchSession(synthBranch, msg);
+    patchSession = synthEmptyPatchSession(synthBranch);
     branchName = patchSession.branchName;
     // Persist the synthetic session so the Reporter can still read it from
     // disk via composePR's existing path-based interface.

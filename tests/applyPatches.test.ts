@@ -136,12 +136,16 @@ describe('applyPatches — empty matches input', () => {
       );
 
       expect(session.results).toEqual([]);
+      expect(session.testRun).toBeNull();
       expect(session.summary).toEqual({
-        attempted: 0,
-        succeeded: 0,
-        failedTests: 0,
-        failedInstall: 0,
-        noFixAvailable: 0,
+        total: 0,
+        byStatus: {
+          'patched-tests-passed': 0,
+          'patched-tests-failed': 0,
+          'patch-failed-install-error': 0,
+          'patch-failed-no-fix-available': 0,
+          'skipped-already-resolved': 0,
+        },
       });
       expect(git).not.toHaveBeenCalled();
       expect(npm).not.toHaveBeenCalled();
@@ -194,13 +198,17 @@ describe('applyPatches — single match, install succeeds, tests pass', () => {
         relatedMatches: ['GHSA-jf85-cpcp-j695'],
         errorMessage: null,
       });
-      expect(session.results[0]!.testOutput).toContain('All 42 tests passed');
+      expect(session.testRun?.status).toBe('passed');
+      expect(session.testRun?.output).toContain('All 42 tests passed');
       expect(session.summary).toEqual({
-        attempted: 1,
-        succeeded: 1,
-        failedTests: 0,
-        failedInstall: 0,
-        noFixAvailable: 0,
+        total: 1,
+        byStatus: {
+          'patched-tests-passed': 1,
+          'patched-tests-failed': 0,
+          'patch-failed-install-error': 0,
+          'patch-failed-no-fix-available': 0,
+          'skipped-already-resolved': 0,
+        },
       });
       expect(session.branchName).toMatch(/^corsec\/hotfix\/\d+$/);
     } finally {
@@ -301,15 +309,19 @@ describe('applyPatches — no fix available (patchedVersion: null)', () => {
         targetVersion: null,
         installedVersion: null,
         status: 'patch-failed-no-fix-available',
-        testOutput: null,
         errorMessage: null,
       });
+      // No install succeeded, so the suite never ran.
+      expect(session.testRun).toBeNull();
       expect(session.summary).toEqual({
-        attempted: 1,
-        succeeded: 0,
-        failedTests: 0,
-        failedInstall: 0,
-        noFixAvailable: 1,
+        total: 1,
+        byStatus: {
+          'patched-tests-passed': 0,
+          'patched-tests-failed': 0,
+          'patch-failed-install-error': 0,
+          'patch-failed-no-fix-available': 1,
+          'skipped-already-resolved': 0,
+        },
       });
     } finally {
       await ctx.cleanup();
@@ -353,6 +365,21 @@ describe('applyPatches — already-resolved by current lockfile', () => {
         targetVersion: '4.5.0',
         installedVersion: '5.1.0',
         status: 'skipped-already-resolved',
+      });
+
+      // This is the status the old four-counter summary had no bucket for: it
+      // was counted in `attempted` and in nothing else, so the session read as
+      // "one attempt, none succeeded, no reason recorded" for a run in which
+      // npm, git and the test command were never invoked.
+      expect(session.summary).toEqual({
+        total: 1,
+        byStatus: {
+          'patched-tests-passed': 0,
+          'patched-tests-failed': 0,
+          'patch-failed-install-error': 0,
+          'patch-failed-no-fix-available': 0,
+          'skipped-already-resolved': 1,
+        },
       });
     } finally {
       await ctx.cleanup();
@@ -403,11 +430,14 @@ describe('applyPatches — install failure on one package does not abort the ses
       });
 
       expect(session.summary).toEqual({
-        attempted: 2,
-        succeeded: 1,
-        failedTests: 0,
-        failedInstall: 1,
-        noFixAvailable: 0,
+        total: 2,
+        byStatus: {
+          'patched-tests-passed': 1,
+          'patched-tests-failed': 0,
+          'patch-failed-install-error': 1,
+          'patch-failed-no-fix-available': 0,
+          'skipped-already-resolved': 0,
+        },
       });
     } finally {
       await ctx.cleanup();
@@ -442,14 +472,19 @@ describe('applyPatches — test failure (shared test run)', () => {
       expect(session.results).toHaveLength(2);
       for (const r of session.results) {
         expect(r.status).toBe('patched-tests-failed');
-        expect(r.testOutput).toContain('TypeError');
       }
+      // One shared run, recorded once — not copied onto each row.
+      expect(session.testRun?.status).toBe('failed');
+      expect(session.testRun?.output).toContain('TypeError');
       expect(session.summary).toEqual({
-        attempted: 2,
-        succeeded: 0,
-        failedTests: 2,
-        failedInstall: 0,
-        noFixAvailable: 0,
+        total: 2,
+        byStatus: {
+          'patched-tests-passed': 0,
+          'patched-tests-failed': 2,
+          'patch-failed-install-error': 0,
+          'patch-failed-no-fix-available': 0,
+          'skipped-already-resolved': 0,
+        },
       });
     } finally {
       await ctx.cleanup();
@@ -514,10 +549,10 @@ describe('applyPatches — branch creation invariant', () => {
 });
 
 // -----------------------------------------------------------------------------
-// applyPatches — testOutput truncation
+// applyPatches — test output truncation
 // -----------------------------------------------------------------------------
 
-describe('applyPatches — testOutput truncation', () => {
+describe('applyPatches — test output truncation', () => {
   it('truncates the captured test output to 5 KiB, keeping the tail', async () => {
     const ctx = await setupWorkdir(matchesSingleRaw);
     try {
@@ -540,7 +575,7 @@ describe('applyPatches — testOutput truncation', () => {
         { git: makeGit(), npm: makeNpm({ lodash: '4.17.22' }), shell },
       );
 
-      const out = session.results[0]!.testOutput!;
+      const out = session.testRun!.output;
       const byteLength = Buffer.byteLength(out, 'utf-8');
       expect(byteLength).toBeLessThanOrEqual(5 * 1024);
       expect(byteLength).toBeGreaterThan(5 * 1024 - 200);
@@ -600,16 +635,16 @@ describe('applyPatches — deterministic output', () => {
 });
 
 // -----------------------------------------------------------------------------
-// applyPatches — status / testOutput coupling
+// applyPatches — session-level invariants
 // -----------------------------------------------------------------------------
 
-describe('applyPatches — a tests-* status and a captured test output imply each other', () => {
-  // The invariant the old placeholder shape could violate: between building
-  // the row and the test run finishing, a PatchResult claimed
-  // 'patched-tests-passed' with testOutput: null, for a suite not yet spawned.
-  // Asserting both directions over a session that mixes all the terminal
-  // statuses is what makes that state observable if it ever comes back.
-  it('holds in both directions across a session containing every terminal status', async () => {
+describe('applyPatches — a tests-* status and a recorded test run imply each other', () => {
+  // The invariant the old placeholder shape could violate: between building the
+  // row and the test run finishing, a PatchResult claimed
+  // 'patched-tests-passed' for a suite that had not been spawned. Now that the
+  // run is recorded once on the session, the statement is that a tests-* status
+  // exists if and only if testRun does — and that its outcome agrees.
+  it('holds in both directions across a session mixing tests-* and non-tests-* rows', async () => {
     const ctx = await setupWorkdir(matchesMultiDifferentRaw);
     try {
       const session = await applyPatches(
@@ -628,14 +663,43 @@ describe('applyPatches — a tests-* status and a captured test output imply eac
         },
       );
 
-      for (const r of session.results) {
-        const ranTests = r.status.startsWith('patched-tests-');
-        expect(ranTests).toBe(r.testOutput !== null);
-      }
+      const tested = session.results.filter((r) => r.status.startsWith('patched-tests-'));
+      expect(tested.length > 0).toBe(session.testRun !== null);
 
-      // Guard against the assertion above passing vacuously.
-      expect(session.results.some((r) => r.testOutput !== null)).toBe(true);
-      expect(session.results.some((r) => r.testOutput === null)).toBe(true);
+      // Guard against the assertion above passing vacuously, and check that the
+      // rows and the single recorded run agree on the outcome.
+      expect(tested).toHaveLength(1);
+      expect(session.results.some((r) => !r.status.startsWith('patched-tests-'))).toBe(true);
+      expect(session.testRun?.status).toBe('passed');
+      expect(tested.every((r) => r.status === 'patched-tests-passed')).toBe(true);
+    } finally {
+      await ctx.cleanup();
+    }
+  });
+
+  it('keeps the summary total equal to the result count and to the sum of its buckets', async () => {
+    // The gap that let the old four-counter summary go wrong: the
+    // already-resolved test asserted results[0] but never asserted the summary,
+    // so `attempted` counting a status with no bucket went unnoticed.
+    const ctx = await setupWorkdir(matchesMultiDifferentRaw);
+    try {
+      const session = await applyPatches(
+        {
+          matchesPath: ctx.matchesPath,
+          outputPath: ctx.outputPath,
+          workingDir: ctx.workingDir,
+          testCommand: 'npm test',
+        },
+        {
+          git: makeGit(),
+          npm: makeNpm({ 'pkg-a': '2.5.0', 'pkg-b': 'fail' }),
+          shell: makeShell(0),
+        },
+      );
+
+      const bucketSum = Object.values(session.summary.byStatus).reduce((a, b) => a + b, 0);
+      expect(session.summary.total).toBe(session.results.length);
+      expect(bucketSum).toBe(session.summary.total);
     } finally {
       await ctx.cleanup();
     }

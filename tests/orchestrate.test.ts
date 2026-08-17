@@ -67,16 +67,19 @@ function happyPatchSession(): PatchSession {
         installedVersion: '4.17.21',
         status: 'patched-tests-passed',
         relatedMatches: ['GHSA-test-0001'],
-        testOutput: 'ok',
         errorMessage: null,
       },
     ],
+    testRun: { status: 'passed', output: 'ok' },
     summary: {
-      attempted: 1,
-      succeeded: 1,
-      failedTests: 0,
-      failedInstall: 0,
-      noFixAvailable: 0,
+      total: 1,
+      byStatus: {
+        'patched-tests-passed': 1,
+        'patched-tests-failed': 0,
+        'patch-failed-install-error': 0,
+        'patch-failed-no-fix-available': 0,
+        'skipped-already-resolved': 0,
+      },
     },
   };
 }
@@ -377,7 +380,8 @@ describe('orchestrate — Patcher throws', () => {
         await readFile(join(dir, 'patch-session.json'), 'utf-8'),
       ) as PatchSession;
       expect(session.results).toEqual([]);
-      expect(session.summary.attempted).toBe(0);
+      expect(session.summary.total).toBe(0);
+      expect(session.testRun).toBeNull();
       expect(session.branchName).toMatch(/^corsec\/hotfix\//);
     } finally {
       await cleanup();

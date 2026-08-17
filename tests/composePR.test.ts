@@ -103,11 +103,17 @@ describe('decideMode — template-only triggers', () => {
           installedVersion: '4.17.21',
           status: 'patched-tests-passed',
           relatedMatches: ['GHSA-x'],
-          testOutput: null,
           errorMessage: null,
         },
       ],
-      summary: { attempted: 1, succeeded: 1, failedTests: 0, failedInstall: 0, noFixAvailable: 0 },
+      testRun: { status: 'passed', output: 'ok' },
+      summary: { total: 1, byStatus: {
+          'patched-tests-passed': 1,
+          'patched-tests-failed': 0,
+          'patch-failed-install-error': 0,
+          'patch-failed-no-fix-available': 0,
+          'skipped-already-resolved': 0,
+        } },
     } as const;
     expect(__testing.decideMode(cort, session)).toBe('template');
   });
@@ -136,7 +142,17 @@ describe('decideMode — template-only triggers', () => {
     const session = {
       branchName: 'b/1',
       results: [],
-      summary: { attempted: 0, succeeded: 0, failedTests: 0, failedInstall: 0, noFixAvailable: 0 },
+      testRun: null,
+      summary: {
+        total: 0,
+        byStatus: {
+          'patched-tests-passed': 0,
+          'patched-tests-failed': 0,
+          'patch-failed-install-error': 0,
+          'patch-failed-no-fix-available': 0,
+          'skipped-already-resolved': 0,
+        },
+      },
     } as const;
     expect(__testing.decideMode(cort, session)).toBe('template');
   });
@@ -177,11 +193,17 @@ describe('decideMode — LLM-call triggers', () => {
           installedVersion: '4.17.21',
           status: 'patched-tests-passed',
           relatedMatches: ['GHSA-x'],
-          testOutput: null,
           errorMessage: null,
         },
       ],
-      summary: { attempted: 1, succeeded: 1, failedTests: 0, failedInstall: 0, noFixAvailable: 0 },
+      testRun: { status: 'passed', output: 'ok' },
+      summary: { total: 1, byStatus: {
+          'patched-tests-passed': 1,
+          'patched-tests-failed': 0,
+          'patch-failed-install-error': 0,
+          'patch-failed-no-fix-available': 0,
+          'skipped-already-resolved': 0,
+        } },
     } as const;
   }
 
@@ -384,11 +406,15 @@ describe('composePR — LLM mode (tests-failed scenario)', () => {
         'vulnerabilities',
       ]);
 
-      // The trimmed patch payload must NOT include testOutput.
+      // The trimmed patch payload carries no noisy fields.
       const patches = parsed['patches'] as Array<Record<string, unknown>>;
-      expect(patches[0]!['testOutput']).toBeUndefined();
       expect(patches[0]!['errorMessage']).toBeUndefined();
       expect(patches[0]!['packageName']).toBe('wrangler');
+
+      // Captured test output never reaches the model — it lives on the session
+      // as testRun and is deliberately not a payload key.
+      expect(parsed['testRun']).toBeUndefined();
+      expect(call.userMessage).not.toContain('Test Files');
 
       // Output is the FakeLLMClient's canned response, verbatim.
       expect(md).toBe(WELL_FORMED_LLM_RESPONSE);
@@ -525,16 +551,19 @@ describe('composePR — payload size budget', () => {
             installedVersion: '2.0.0',
             status: 'patched-tests-failed',
             relatedMatches: ['GHSA-0000-aaaa-bbbb'],
-            testOutput: null,
             errorMessage: null,
           },
         ],
+        testRun: { status: 'failed', output: 'boom' },
         summary: {
-          attempted: 1,
-          succeeded: 0,
-          failedTests: 1,
-          failedInstall: 0,
-          noFixAvailable: 0,
+          total: 1,
+          byStatus: {
+            'patched-tests-passed': 0,
+            'patched-tests-failed': 1,
+            'patch-failed-install-error': 0,
+            'patch-failed-no-fix-available': 0,
+            'skipped-already-resolved': 0,
+          },
         },
       }),
       'utf-8',

@@ -131,9 +131,9 @@ export async function applyPatches(
   }
 
   const results: PatchResult[] = [];
-  // Rows whose install exited 0. Their status and testOutput are not knowable
-  // until the shared test run below finishes, so they are held here WITHOUT
-  // those two fields rather than materialised early with a placeholder.
+  // Rows whose install exited 0. Their status is not knowable until the shared
+  // test run below finishes, so they are held here WITHOUT it rather than
+  // materialised early with a placeholder.
   //
   // The previous shape pushed a complete PatchResult asserting
   // 'patched-tests-passed' — the exact token the CI PR gate counts — for a
@@ -141,7 +141,7 @@ export async function applyPatches(
   // by a name-keyed linear scan. Correctness rested on statement ordering
   // rather than on the data model; now `status` is assigned exactly once, at
   // the point it is actually known.
-  const pendingTests: Array<Omit<PatchResult, 'status' | 'testOutput'>> = [];
+  const pendingTests: Array<Omit<PatchResult, 'status'>> = [];
 
   for (const { pkg, currentInstalled, decision } of decisions) {
     if (decision === 'no-fix') {
@@ -152,7 +152,6 @@ export async function applyPatches(
         installedVersion: null,
         status: 'patch-failed-no-fix-available',
         relatedMatches: pkg.ghsaIds,
-        testOutput: null,
         errorMessage: null,
       });
       continue;
@@ -166,7 +165,6 @@ export async function applyPatches(
         installedVersion: currentInstalled,
         status: 'skipped-already-resolved',
         relatedMatches: pkg.ghsaIds,
-        testOutput: null,
         errorMessage: null,
       });
       continue;
@@ -187,7 +185,6 @@ export async function applyPatches(
         installedVersion: null,
         status: 'patch-failed-install-error',
         relatedMatches: pkg.ghsaIds,
-        testOutput: null,
         errorMessage:
           installResult.stderr.trim() ||
           `npm install exited with code ${installResult.exitCode}`,
@@ -219,15 +216,23 @@ export async function applyPatches(
     });
   }
 
+  // The suite runs at most once per session, and its outcome is recorded once
+  // on the session rather than copied onto every row that shares it.
+  let testRun: PatchSession['testRun'] = null;
   if (pendingTests.length > 0) {
     const testResult = await shell(opts.testCommand, opts.workingDir);
     const combined = testResult.stdout + testResult.stderr;
-    const truncated = truncateTail(combined, TEST_OUTPUT_MAX_BYTES);
-    const testStatus: PatchStatus =
-      testResult.exitCode === 0 ? 'patched-tests-passed' : 'patched-tests-failed';
+    const passed = testResult.exitCode === 0;
+    testRun = {
+      status: passed ? 'passed' : 'failed',
+      output: truncateTail(combined, TEST_OUTPUT_MAX_BYTES),
+    };
 
+    const testStatus: PatchStatus = passed
+      ? 'patched-tests-passed'
+      : 'patched-tests-failed';
     for (const pending of pendingTests) {
-      results.push({ ...pending, status: testStatus, testOutput: truncated });
+      results.push({ ...pending, status: testStatus });
     }
   }
 
@@ -238,17 +243,32 @@ export async function applyPatches(
   // always had.
   results.sort((a, b) => a.packageName.localeCompare(b.packageName));
 
-  const summary = {
-    attempted: results.length,
-    succeeded: results.filter((r) => r.status === 'patched-tests-passed').length,
-    failedTests: results.filter((r) => r.status === 'patched-tests-failed').length,
-    failedInstall: results.filter((r) => r.status === 'patch-failed-install-error').length,
-    noFixAvailable: results.filter((r) => r.status === 'patch-failed-no-fix-available').length,
+  const session: PatchSession = {
+    branchName,
+    results,
+    testRun,
+    summary: summarise(results),
   };
-
-  const session: PatchSession = { branchName, results, summary };
   await writeFile(opts.outputPath, JSON.stringify(session, null, 2), 'utf-8');
   return session;
+}
+
+// One pass over the results, one bucket per status.
+//
+// The seed is a Record<PatchStatus, number> object literal rather than a
+// reduce-with-cast: TypeScript rejects the literal outright if PATCH_STATUSES
+// gains a sixth member, which is the whole point — the old four-counter shape
+// simply had no bucket for `skipped-already-resolved` and nothing complained.
+function summarise(results: PatchResult[]): PatchSession['summary'] {
+  const byStatus: Record<PatchStatus, number> = {
+    'patched-tests-passed': 0,
+    'patched-tests-failed': 0,
+    'patch-failed-install-error': 0,
+    'patch-failed-no-fix-available': 0,
+    'skipped-already-resolved': 0,
+  };
+  for (const r of results) byStatus[r.status]++;
+  return { total: results.length, byStatus };
 }
 
 async function loadMatches(matchesPath: string): Promise<MatchedThreat[]> {

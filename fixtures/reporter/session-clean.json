@@ -8,15 +8,21 @@
       "installedVersion": "4.17.21",
       "status": "patched-tests-passed",
       "relatedMatches": ["GHSA-aaaa-bbbb-cccc"],
-      "testOutput": null,
       "errorMessage": null
     }
   ],
+  "testRun": {
+    "status": "passed",
+    "output": "Test Files  1 passed (1)\n     Tests  12 passed (12)"
+  },
   "summary": {
-    "attempted": 1,
-    "succeeded": 1,
-    "failedTests": 0,
-    "failedInstall": 0,
-    "noFixAvailable": 0
+    "total": 1,
+    "byStatus": {
+      "patched-tests-passed": 1,
+      "patched-tests-failed": 0,
+      "patch-failed-install-error": 0,
+      "patch-failed-no-fix-available": 0,
+      "skipped-already-resolved": 0
+    }
   }
 }

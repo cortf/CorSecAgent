@@ -69,9 +69,11 @@ export interface ComposePROptions {
 type ReporterMode = 'template' | 'llm';
 
 // Trimmed shapes that go into the user-message JSON. These intentionally
-// strip large/noisy fields (testOutput, vulnerableRange, errorMessage,
-// guideline, etc.) — the model doesn't need them and they would blow the
-// token budget.
+// strip large/noisy fields (vulnerableRange, errorMessage, guideline, etc.)
+// — the model doesn't need them and they would blow the token budget. The
+// session's captured test output (PatchSession.testRun) is likewise never a
+// payload key: it is the single largest field in the session, capped at 5KB,
+// and the model reasons from each result's status instead.
 interface TrimmedVulnerability {
   ghsaId: string;
   packageName: string;

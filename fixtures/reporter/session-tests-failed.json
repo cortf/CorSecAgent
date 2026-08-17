@@ -8,15 +8,21 @@
       "installedVersion": "3.25.0",
       "status": "patched-tests-failed",
       "relatedMatches": ["GHSA-f8mp-x433-5wpf"],
-      "testOutput": "FAIL test/integration/wrangler.test.ts > wrangler upload fails on new validator",
       "errorMessage": null
     }
   ],
+  "testRun": {
+    "status": "failed",
+    "output": "FAIL test/integration/wrangler.test.ts > wrangler upload fails on new validator"
+  },
   "summary": {
-    "attempted": 1,
-    "succeeded": 0,
-    "failedTests": 1,
-    "failedInstall": 0,
-    "noFixAvailable": 0
+    "total": 1,
+    "byStatus": {
+      "patched-tests-passed": 0,
+      "patched-tests-failed": 1,
+      "patch-failed-install-error": 0,
+      "patch-failed-no-fix-available": 0,
+      "skipped-already-resolved": 0
+    }
   }
 }
