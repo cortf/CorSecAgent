@@ -1,6 +1,6 @@
 import { stat } from 'node:fs/promises';
 import { spawnCapture } from '../shared/spawnCapture.js';
-import type { CheckResult, CheckSeverity, CheckovFinding, CheckovReport } from './types.js';
+import type { CheckSeverity, CheckovFinding, CheckovReport } from './types.js';
 
 // Minimal callable interface for invoking the Checkov CLI.
 // Tests inject a fake executor so the suite never has to actually spawn checkov
@@ -84,19 +84,14 @@ export async function runCheckov(
     throw new Error(`runCheckov: failed to parse checkov stdout as JSON for ${directory}: ${msg}`);
   }
 
-  const passed = (raw.results?.passed_checks ?? []).map(toFinding);
-  const failed = (raw.results?.failed_checks ?? []).map(toFinding);
-  const skipped = (raw.results?.skipped_checks ?? []).map(toFinding);
-
+  // Membership in these three arrays IS the partition — Checkov has already
+  // done it, and we do not second-guess it from each row's `check_result`
+  // string. (We used to project that string onto every finding, which meant an
+  // unrecognised value produced a row marked FAILED sitting inside `passed`.)
   return {
-    passed,
-    failed,
-    skipped,
-    summary: {
-      passed: passed.length,
-      failed: failed.length,
-      skipped: skipped.length,
-    },
+    passed: (raw.results?.passed_checks ?? []).map(toFinding),
+    failed: (raw.results?.failed_checks ?? []).map(toFinding),
+    skipped: (raw.results?.skipped_checks ?? []).map(toFinding),
   };
 }
 
@@ -104,24 +99,12 @@ function toFinding(c: RawCheck): CheckovFinding {
   return {
     checkId: c.check_id ?? '',
     checkName: c.check_name ?? '',
-    result: normaliseResult(c.check_result?.result),
     severity: normaliseSeverity(c.severity ?? null),
     filePath: c.file_path ?? '',
     fileLineRange: c.file_line_range ?? [0, 0],
     resource: c.resource ?? '',
     guideline: c.guideline ?? null,
   };
-}
-
-function normaliseResult(raw: string | undefined): CheckResult {
-  // Checkov emits the result string in the canonical uppercase form; defending
-  // against case drift keeps us robust to minor version changes.
-  const upper = (raw ?? '').toUpperCase();
-  if (upper === 'PASSED' || upper === 'FAILED' || upper === 'SKIPPED') return upper;
-  // Anything unexpected gets bucketed into FAILED so it is surfaced rather than
-  // silently dropped. A truly unknown result string is itself a finding worth
-  // looking at.
-  return 'FAILED';
 }
 
 function normaliseSeverity(raw: string | null): CheckSeverity | null {

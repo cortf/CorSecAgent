@@ -10,16 +10,19 @@
 
 export type CheckSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
-export type CheckResult = 'PASSED' | 'FAILED' | 'SKIPPED';
-
 // One row in Checkov's passed/failed/skipped arrays after normalisation.
 // severity is nullable because Checkov assigns severity only when the policy
 // has one configured (community checks frequently do not).
 // guideline is nullable for the same reason — many checks have no remediation URL.
+//
+// Deliberately carries no `result` field. Checkov's payload is already
+// partitioned into passed/failed/skipped arrays, and `runCheckov` projects all
+// three identically — so a per-row result string could only ever restate, or
+// contradict, the array the row already sits in. Array membership is the single
+// source of truth.
 export interface CheckovFinding {
   checkId: string;
   checkName: string;
-  result: CheckResult;
   severity: CheckSeverity | null;
   filePath: string;
   fileLineRange: [number, number];
@@ -27,20 +30,14 @@ export interface CheckovFinding {
   guideline: string | null;
 }
 
-// Top-level report produced by `runCheckov`. The three arrays are partitioned
-// by `result` and the summary counts mirror the array lengths exactly (the
-// wrapper recomputes summary from the partitioned arrays rather than trusting
-// Checkov's `summary` block, which also contains unrelated keys like
-// parsing_errors and resource_count).
+// Top-level report produced by `runCheckov`. No summary block: the counts it
+// used to carry were exactly the three array lengths, stored beside the arrays
+// and hand-maintained by every test literal that built a report. Callers that
+// want a count read `.failed.length`.
 export interface CheckovReport {
   passed: CheckovFinding[];
   failed: CheckovFinding[];
   skipped: CheckovFinding[];
-  summary: {
-    passed: number;
-    failed: number;
-    skipped: number;
-  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,15 +81,17 @@ export interface TfsecFinding {
 }
 
 // Top-level report produced by `runTfsec`. Note: no `skipped` array — tfsec
-// has no equivalent state, so carrying one would be dead weight. Summary
-// counts mirror the partitioned array lengths exactly.
+// has no equivalent state, so carrying one would be dead weight. Also no
+// summary block, for the same reason as CheckovReport: it restated the two
+// array lengths.
+//
+// Unlike Checkov's, `TfsecFinding.status` is retained — it is the partition
+// predicate itself, computed once from tfsec's raw integer enum and then used
+// to split `results[]`, so it cannot disagree with array membership by
+// construction.
 export interface TfsecReport {
   passed: TfsecFinding[];
   failed: TfsecFinding[];
-  summary: {
-    passed: number;
-    failed: number;
-  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

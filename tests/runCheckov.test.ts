@@ -31,44 +31,24 @@ function makeExecutor(stdout: string, stderr = '', exitCode = 0): CheckovExecuto
 }
 
 describe('runCheckov — clean output (no failed checks)', () => {
-  it('returns a CheckovReport with empty failed array and summary.failed === 0', async () => {
+  it('returns a CheckovReport with an empty failed array', async () => {
     const executor = makeExecutor(cleanStdout);
     const report = await runCheckov(FIXTURE_DIR, executor);
 
     expect(report.failed).toEqual([]);
-    expect(report.summary.failed).toBe(0);
     expect(report.passed.length).toBe(2);
     expect(report.skipped.length).toBe(0);
-  });
-
-  it('summary counts match the array lengths exactly', async () => {
-    const executor = makeExecutor(cleanStdout);
-    const report = await runCheckov(FIXTURE_DIR, executor);
-
-    expect(report.summary.passed).toBe(report.passed.length);
-    expect(report.summary.failed).toBe(report.failed.length);
-    expect(report.summary.skipped).toBe(report.skipped.length);
   });
 });
 
 describe('runCheckov — findings output (mixed pass/fail/skip)', () => {
-  it('partitions checks into passed, failed, and skipped arrays by result', async () => {
+  it('partitions checks into passed, failed, and skipped arrays', async () => {
     const executor = makeExecutor(findingsStdout);
     const report = await runCheckov(FIXTURE_DIR, executor);
 
     expect(report.passed).toHaveLength(1);
     expect(report.failed).toHaveLength(3);
     expect(report.skipped).toHaveLength(1);
-    expect(report.passed.every(f => f.result === 'PASSED')).toBe(true);
-    expect(report.failed.every(f => f.result === 'FAILED')).toBe(true);
-    expect(report.skipped.every(f => f.result === 'SKIPPED')).toBe(true);
-  });
-
-  it('summary counts match the partitioned array lengths', async () => {
-    const executor = makeExecutor(findingsStdout);
-    const report = await runCheckov(FIXTURE_DIR, executor);
-
-    expect(report.summary).toEqual({ passed: 1, failed: 3, skipped: 1 });
   });
 
   it('preserves all three severities (HIGH, CRITICAL, MEDIUM) across failed findings', async () => {
@@ -100,6 +80,40 @@ describe('runCheckov — findings output (mixed pass/fail/skip)', () => {
     const report = await runCheckov(FIXTURE_DIR, executor);
 
     expect(report.skipped[0]?.severity).toBeNull();
+  });
+});
+
+describe('runCheckov — array membership is the partition, not check_result', () => {
+  // Checkov's payload arrives pre-partitioned into passed/failed/skipped
+  // arrays. runCheckov maps the same projection over all three and never reads
+  // a row's own result string to decide which bucket it belongs in. Pinning
+  // that here because the inverse — trusting the per-row string — is the
+  // plausible-looking refactor that would silently reclassify findings.
+  const oddResults = JSON.stringify({
+    results: {
+      passed_checks: [
+        { check_id: 'CKV_AWS_1', check_result: { result: 'PASSED_WITH_WARNINGS' } },
+        { check_id: 'CKV_AWS_2' },
+      ],
+      failed_checks: [],
+      skipped_checks: [],
+    },
+  });
+
+  it('keeps a passed_checks row with an unrecognised result string in passed[] only', async () => {
+    const report = await runCheckov(FIXTURE_DIR, makeExecutor(oddResults));
+
+    expect(report.passed.map((f) => f.checkId)).toContain('CKV_AWS_1');
+    expect(report.failed).toEqual([]);
+    expect(report.skipped).toEqual([]);
+  });
+
+  it('keeps a passed_checks row with no check_result block at all in passed[] only', async () => {
+    const report = await runCheckov(FIXTURE_DIR, makeExecutor(oddResults));
+
+    expect(report.passed.map((f) => f.checkId)).toContain('CKV_AWS_2');
+    expect(report.failed).toEqual([]);
+    expect(report.skipped).toEqual([]);
   });
 });
 

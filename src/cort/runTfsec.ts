@@ -86,17 +86,14 @@ export async function runTfsec(
     throw new Error(`runTfsec: failed to parse tfsec stdout as JSON for ${directory}: ${msg}`);
   }
 
+  // `status` is computed once in toFinding (from tfsec's raw integer enum) and
+  // is then the partition predicate, so the arrays and the per-row flag agree
+  // by construction — unlike Checkov, where the equivalent field was decorative.
   const all = (raw.results ?? []).map(toFinding);
-  const passed = all.filter((f) => f.status === 'passed');
-  const failed = all.filter((f) => f.status === 'failed');
 
   return {
-    passed,
-    failed,
-    summary: {
-      passed: passed.length,
-      failed: failed.length,
-    },
+    passed: all.filter((f) => f.status === 'passed'),
+    failed: all.filter((f) => f.status === 'failed'),
   };
 }
 

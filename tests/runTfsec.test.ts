@@ -31,30 +31,20 @@ function makeExecutor(stdout: string, stderr = '', exitCode = 0): TfsecExecutor 
 }
 
 describe('runTfsec — clean output (no failed checks)', () => {
-  it('returns a TfsecReport with empty failed array and summary.failed === 0', async () => {
+  it('returns a TfsecReport with an empty failed array', async () => {
     const executor = makeExecutor(cleanStdout);
     const report = await runTfsec(FIXTURE_DIR, executor);
 
     expect(report.failed).toEqual([]);
-    expect(report.summary.failed).toBe(0);
     expect(report.passed.length).toBe(2);
   });
 
-  it('summary counts match the array lengths exactly', async () => {
-    const executor = makeExecutor(cleanStdout);
-    const report = await runTfsec(FIXTURE_DIR, executor);
-
-    expect(report.summary.passed).toBe(report.passed.length);
-    expect(report.summary.failed).toBe(report.failed.length);
-  });
-
-  it('produces empty arrays and zero summary counts when results[] is empty', async () => {
+  it('produces empty arrays when results[] is empty', async () => {
     const executor = makeExecutor(JSON.stringify({ results: [] }));
     const report = await runTfsec(FIXTURE_DIR, executor);
 
     expect(report.passed).toEqual([]);
     expect(report.failed).toEqual([]);
-    expect(report.summary).toEqual({ passed: 0, failed: 0 });
   });
 });
 
@@ -67,13 +57,6 @@ describe('runTfsec — findings output (mixed pass/fail)', () => {
     expect(report.failed).toHaveLength(3);
     expect(report.passed.every((f) => f.status === 'passed')).toBe(true);
     expect(report.failed.every((f) => f.status === 'failed')).toBe(true);
-  });
-
-  it('summary counts match the partitioned array lengths', async () => {
-    const executor = makeExecutor(findingsStdout);
-    const report = await runTfsec(FIXTURE_DIR, executor);
-
-    expect(report.summary).toEqual({ passed: 1, failed: 3 });
   });
 
   it('preserves all three severities (HIGH, CRITICAL, MEDIUM) across failed findings', async () => {

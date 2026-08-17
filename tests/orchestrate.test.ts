@@ -41,16 +41,11 @@ function baseOpts(outputDir: string, overrides: Partial<OrchestrateOptions> = {}
 }
 
 function emptyCheckovReport(): CheckovReport {
-  return {
-    passed: [],
-    failed: [],
-    skipped: [],
-    summary: { passed: 0, failed: 0, skipped: 0 },
-  };
+  return { passed: [], failed: [], skipped: [] };
 }
 
 function emptyTfsecReport(): TfsecReport {
-  return { passed: [], failed: [], summary: { passed: 0, failed: 0 } };
+  return { passed: [], failed: [] };
 }
 
 function emptyAwsContextReport(): AwsContextReport {

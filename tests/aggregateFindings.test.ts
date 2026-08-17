@@ -46,11 +46,11 @@ function makeTfsecExecutor(stdout: string): TfsecExecutor {
 
 // Small constructors so each test reads as data, not boilerplate.
 function emptyCheckovReport(): CheckovReport {
-  return { passed: [], failed: [], skipped: [], summary: { passed: 0, failed: 0, skipped: 0 } };
+  return { passed: [], failed: [], skipped: [] };
 }
 
 function emptyTfsecReport(): TfsecReport {
-  return { passed: [], failed: [], summary: { passed: 0, failed: 0 } };
+  return { passed: [], failed: [] };
 }
 
 function emptyAwsContext(): AwsContextReport {
@@ -64,7 +64,6 @@ function checkovFinding(over: Partial<CheckovFinding> = {}): CheckovFinding {
   return {
     checkId: 'CKV_AWS_19',
     checkName: 'Ensure all data stored in the S3 bucket is securely encrypted at rest',
-    result: 'FAILED',
     severity: 'CRITICAL',
     filePath: '/s3.tf',
     fileLineRange: [1, 6],
@@ -178,7 +177,6 @@ describe('aggregateFindings — single-source attribution', () => {
     const checkov: CheckovReport = {
       ...emptyCheckovReport(),
       failed: [checkovFinding()],
-      summary: { passed: 0, failed: 1, skipped: 0 },
     };
 
     const report = aggregateFindings(checkov, emptyTfsecReport(), emptyAwsContext());
@@ -195,7 +193,6 @@ describe('aggregateFindings — single-source attribution', () => {
     const tfsec: TfsecReport = {
       ...emptyTfsecReport(),
       failed: [tfsecFinding()],
-      summary: { passed: 0, failed: 1 },
     };
 
     const report = aggregateFindings(emptyCheckovReport(), tfsec, emptyAwsContext());
@@ -213,12 +210,10 @@ describe('aggregateFindings — deduplication on (category, resource)', () => {
     const checkov: CheckovReport = {
       ...emptyCheckovReport(),
       failed: [checkovFinding()], // CKV_AWS_19 on aws_s3_bucket.public
-      summary: { passed: 0, failed: 1, skipped: 0 },
     };
     const tfsec: TfsecReport = {
       ...emptyTfsecReport(),
       failed: [tfsecFinding()], // AVD-AWS-0088 on aws_s3_bucket.public
-      summary: { passed: 0, failed: 1 },
     };
 
     const report = aggregateFindings(checkov, tfsec, emptyAwsContext());
@@ -237,7 +232,6 @@ describe('aggregateFindings — deduplication on (category, resource)', () => {
         checkovFinding({ resource: 'aws_s3_bucket.one' }),
         checkovFinding({ resource: 'aws_s3_bucket.two' }),
       ],
-      summary: { passed: 0, failed: 2, skipped: 0 },
     };
 
     const report = aggregateFindings(checkov, emptyTfsecReport(), emptyAwsContext());
@@ -255,12 +249,10 @@ describe('aggregateFindings — severity reconciliation', () => {
     const checkov: CheckovReport = {
       ...emptyCheckovReport(),
       failed: [checkovFinding({ severity: 'MEDIUM' })],
-      summary: { passed: 0, failed: 1, skipped: 0 },
     };
     const tfsec: TfsecReport = {
       ...emptyTfsecReport(),
       failed: [tfsecFinding({ severity: 'HIGH' })],
-      summary: { passed: 0, failed: 1 },
     };
 
     const report = aggregateFindings(checkov, tfsec, emptyAwsContext());
@@ -278,12 +270,10 @@ describe('aggregateFindings — severity reconciliation', () => {
     const checkov: CheckovReport = {
       ...emptyCheckovReport(),
       failed: [checkovFinding({ severity: 'LOW' })],
-      summary: { passed: 0, failed: 1, skipped: 0 },
     };
     const tfsec: TfsecReport = {
       ...emptyTfsecReport(),
       failed: [tfsecFinding({ severity: 'CRITICAL' })],
-      summary: { passed: 0, failed: 1 },
     };
 
     const report = aggregateFindings(checkov, tfsec, emptyAwsContext());
@@ -294,12 +284,10 @@ describe('aggregateFindings — severity reconciliation', () => {
     const checkov: CheckovReport = {
       ...emptyCheckovReport(),
       failed: [checkovFinding({ severity: 'HIGH', checkName: 'CHECKOV-DESCRIPTION' })],
-      summary: { passed: 0, failed: 1, skipped: 0 },
     };
     const tfsec: TfsecReport = {
       ...emptyTfsecReport(),
       failed: [tfsecFinding({ severity: 'HIGH', ruleDescription: 'TFSEC-DESCRIPTION' })],
-      summary: { passed: 0, failed: 1 },
     };
 
     const report = aggregateFindings(checkov, tfsec, emptyAwsContext());
@@ -310,12 +298,10 @@ describe('aggregateFindings — severity reconciliation', () => {
     const checkov: CheckovReport = {
       ...emptyCheckovReport(),
       failed: [checkovFinding({ severity: 'LOW', checkName: 'CHECKOV-DESCRIPTION' })],
-      summary: { passed: 0, failed: 1, skipped: 0 },
     };
     const tfsec: TfsecReport = {
       ...emptyTfsecReport(),
       failed: [tfsecFinding({ severity: 'CRITICAL', ruleDescription: 'TFSEC-DESCRIPTION' })],
-      summary: { passed: 0, failed: 1 },
     };
 
     const report = aggregateFindings(checkov, tfsec, emptyAwsContext());
@@ -331,7 +317,6 @@ describe('aggregateFindings — uncategorized never deduplicates', () => {
         checkovFinding({ checkId: 'CKV_AWS_99991', resource: 'aws_thing.x', checkName: 'unknown-a' }),
         checkovFinding({ checkId: 'CKV_AWS_99992', resource: 'aws_thing.x', checkName: 'unknown-b' }),
       ],
-      summary: { passed: 0, failed: 2, skipped: 0 },
     };
 
     const report = aggregateFindings(checkov, emptyTfsecReport(), emptyAwsContext());
@@ -346,12 +331,10 @@ describe('aggregateFindings — uncategorized never deduplicates', () => {
     const checkov: CheckovReport = {
       ...emptyCheckovReport(),
       failed: [checkovFinding({ checkId: 'CKV_AWS_99991', resource: 'aws_thing.x' })],
-      summary: { passed: 0, failed: 1, skipped: 0 },
     };
     const tfsec: TfsecReport = {
       ...emptyTfsecReport(),
       failed: [tfsecFinding({ ruleId: 'AVD-AWS-9999', resource: 'aws_thing.x' })],
-      summary: { passed: 0, failed: 1 },
     };
 
     const report = aggregateFindings(checkov, tfsec, emptyAwsContext());
@@ -395,7 +378,6 @@ describe('aggregateFindings — summary counts match the findings array', () => 
         checkovFinding({ checkId: 'CKV_AWS_24', severity: 'MEDIUM', resource: 'aws_sg.b', checkName: 'sg' }),
         checkovFinding({ checkId: 'CKV_AWS_79', severity: 'HIGH', resource: 'aws_instance.c', checkName: 'imds' }),
       ],
-      summary: { passed: 0, failed: 3, skipped: 0 },
     };
 
     const report = aggregateFindings(checkov, emptyTfsecReport(), emptyAwsContext());
@@ -417,7 +399,6 @@ describe('aggregateFindings — deterministic ordering', () => {
         checkovFinding({ checkId: 'CKV_AWS_24', severity: 'MEDIUM', resource: 'aws_sg.a', checkName: 'sg' }),
         checkovFinding({ checkId: 'CKV_AWS_79', severity: 'HIGH', resource: 'aws_instance.c', checkName: 'imds' }),
       ],
-      summary: { passed: 0, failed: 3, skipped: 0 },
     };
 
     const a = aggregateFindings(checkov, emptyTfsecReport(), emptyAwsContext());
@@ -436,7 +417,6 @@ describe('aggregateFindings — deterministic ordering', () => {
         checkovFinding({ checkId: 'CKV_AWS_24', severity: 'MEDIUM', resource: 'aws_sg.x', checkName: 'sg' }),
         checkovFinding({ checkId: 'CKV_AWS_79', severity: 'HIGH', resource: 'aws_instance.y', checkName: 'imds' }),
       ],
-      summary: { passed: 0, failed: 4, skipped: 0 },
     };
 
     const report = aggregateFindings(checkov, emptyTfsecReport(), emptyAwsContext());
@@ -455,7 +435,6 @@ describe('aggregateFindings — single-scanner inputs produce sensible reports',
     const checkov: CheckovReport = {
       ...emptyCheckovReport(),
       failed: [checkovFinding(), checkovFinding({ resource: 'aws_s3_bucket.other' })],
-      summary: { passed: 0, failed: 2, skipped: 0 },
     };
 
     const report = aggregateFindings(checkov, emptyTfsecReport(), emptyAwsContext());
@@ -470,7 +449,6 @@ describe('aggregateFindings — single-scanner inputs produce sensible reports',
     const tfsec: TfsecReport = {
       ...emptyTfsecReport(),
       failed: [tfsecFinding(), tfsecFinding({ resource: 'aws_s3_bucket.other' })],
-      summary: { passed: 0, failed: 2 },
     };
 
     const report = aggregateFindings(emptyCheckovReport(), tfsec, emptyAwsContext());
