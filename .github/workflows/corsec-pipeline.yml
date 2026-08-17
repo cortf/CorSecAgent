@@ -1,9 +1,14 @@
 name: CorSec Pipeline
 
-# Runs Hunter → Cort → Patcher → Reporter end-to-end. In dry-run mode (the
-# default) every artifact is produced and uploaded but no branch is pushed
-# and no PR is opened. Flip dry_run: false only after at least a week of
-# clean dry-run observation — see README.md "Deployment" section.
+# Runs Hunter → Cort → Patcher → Reporter end-to-end. In dry-run mode every
+# artifact is produced and uploaded but no branch is pushed and no PR is
+# opened. Flip dry_run: false only after at least a week of clean dry-run
+# observation — see README.md "Deployment" section.
+#
+# Dry run is the default in both senses that matter: the workflow_dispatch
+# input defaults to true, AND the Resolve-run-mode step below defaults the
+# resolved value to true whenever the input is absent — which is every
+# scheduled run, since GitHub does not populate `inputs` for cron events.
 
 on:
   schedule:
@@ -40,6 +45,28 @@ jobs:
       AWS_AUDIT_ROLE_ARN: ${{ secrets.AWS_AUDIT_ROLE_ARN }}
 
     steps:
+      # Single source of truth for "is this a dry run".
+      #
+      # GitHub does NOT populate the `inputs` context for a `schedule` event, so
+      # `inputs.dry_run` expands to the empty string on every cron run — the
+      # `default: true` above belongs to workflow_dispatch only. Defaulting the
+      # shell variable (not just the input) is what makes the unattended path
+      # fail CLOSED. Every downstream step reads this step's output rather than
+      # re-deriving the answer from `inputs`.
+      - name: Resolve run mode
+        id: mode
+        env:
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+        run: |
+          DRY_RUN="${DRY_RUN_INPUT:-true}"
+          # Only an explicit "false" is treated as live. Anything else — empty
+          # (cron), "true", or an unexpected value — stays dry.
+          if [ "$DRY_RUN" != "false" ]; then
+            DRY_RUN="true"
+          fi
+          echo "dry_run=$DRY_RUN" >> "$GITHUB_OUTPUT"
+          echo "Resolved dry_run=$DRY_RUN (raw input: '${DRY_RUN_INPUT}', event: ${{ github.event_name }})"
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -95,11 +122,18 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           mkdir -p .corsec
+          # --dry-run is recorded in the summary artifact for observability; it
+          # does not itself prevent a push (see src/orchestrate.ts). The PR gate
+          # below is the control that does.
+          DRY_RUN_FLAG=""
+          if [ "${{ steps.mode.outputs.dry_run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
           npx tsx src/orchestrate.ts \
             --output-dir .corsec \
             --ecosystem NPM \
             ${{ inputs.terraform_dir != '' && format('--terraform-dir {0}', inputs.terraform_dir) || '' }} \
-            ${{ inputs.dry_run && '--dry-run' || '' }}
+            $DRY_RUN_FLAG
 
       - name: Upload artifacts
         if: always()
@@ -117,11 +151,16 @@ jobs:
         # least one patched-tests-passed result. The orchestrator always
         # writes the file (synthetic on failure), so jq's existence check is
         # safe.
+        #
+        # The gate is written to fail closed: it opens a PR only on an explicit
+        # "false" from the Resolve-run-mode step. Testing `= "true"` instead
+        # would let any unexpected value (notably the empty string a cron run
+        # used to produce) fall through into an unattended PR.
         run: |
-          DRY_RUN="${{ inputs.dry_run }}"
-          if [ "$DRY_RUN" = "true" ]; then
+          DRY_RUN="${{ steps.mode.outputs.dry_run }}"
+          if [ "$DRY_RUN" != "false" ]; then
             echo "should_open_pr=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping PR creation: dry_run=true."
+            echo "Skipping PR creation: dry_run=$DRY_RUN."
             exit 0
           fi
 
@@ -161,7 +200,7 @@ jobs:
         run: |
           echo "## CorSec Pipeline Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Dry run:** ${{ inputs.dry_run }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Dry run:** ${{ steps.mode.outputs.dry_run }}" >> "$GITHUB_STEP_SUMMARY"
           if [ -f .corsec/orchestration-summary.json ]; then
             echo "- **Exit code:** $(jq -r '.finalExitCode' .corsec/orchestration-summary.json)" >> "$GITHUB_STEP_SUMMARY"
             echo "- **Match count:** $(jq -r '.matchCount' .corsec/orchestration-summary.json)" >> "$GITHUB_STEP_SUMMARY"
