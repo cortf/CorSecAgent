@@ -138,6 +138,19 @@ export async function composePR(
     readJson<PatchSession>(opts.patchSessionPath),
   ]);
 
+  // readJson is an unchecked cast, so these three values are only as
+  // well-formed as whatever is on disk. Checking the fields the code below
+  // actually dereferences, at the boundary where the path is still in scope:
+  // `{"findings": []}` is valid JSON and casts cleanly, and used to reach
+  // decideMode's three-level `context.imdsv2.checked` dereference and throw a
+  // bare TypeError naming no file — precisely the failure mode readJson's own
+  // error wrapper goes to trouble to prevent.
+  assertArray(matches, opts.matchesPath, 'top-level advisory match array');
+  assertArray(cortReport?.findings, opts.cortReportPath, 'findings');
+  assertArray(cortReport?.context?.alb?.albArns, opts.cortReportPath, 'context.alb.albArns');
+  assertArray(cortReport?.context?.imdsv2?.checked, opts.cortReportPath, 'context.imdsv2.checked');
+  assertArray(patchSession?.results, opts.patchSessionPath, 'results');
+
   const mode = decideMode(cortReport, patchSession);
   // Observability: Slice 12's workflow can grep this line to track how
   // often the reporter actually invokes the LLM vs. uses the template.
@@ -378,6 +391,14 @@ async function readJson<T>(path: string): Promise<T> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`composePR: failed to parse JSON at ${path}: ${msg}`);
+  }
+}
+
+// Names both the offending file and the field that was missing, so a malformed
+// artifact is a one-line diagnosis rather than a stack trace into decideMode.
+function assertArray(value: unknown, path: string, field: string): void {
+  if (!Array.isArray(value)) {
+    throw new Error(`composePR: ${path} is missing the required "${field}" array`);
   }
 }
 

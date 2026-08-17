@@ -20,7 +20,14 @@ Hybrid cybersecurity automation pipeline. Two logical modules:
 - All version comparison goes through `src/shared/semverRange.ts`.
   Do not call `semver` directly from feature code.
 - Read lockfiles, not package.json ranges, for installed versions.
-- Checkov/tfsec configs live in `policies/`, not `src/`.
+- **When** Checkov/tfsec grow custom configs or policies, they live in
+  `policies/`, not `src/`. This is reserved scaffolding, **not yet wired**:
+  `policies/checkov/` and `policies/custom/` are empty, nothing under `src/`,
+  `.github/` or `scripts/` references the path, and both scanner wrappers
+  hardcode their argument lists (`runCheckov.ts`, `runTfsec.ts`) with no
+  `--config-file` and no `--external-checks-dir`. Wiring the seam means adding
+  an optional config path to both wrappers. Do not go looking for policy config
+  that exists today — there is none.
 
 ## Current status
 

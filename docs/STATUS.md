@@ -373,6 +373,187 @@ the first three weeks of careful, attentive, dry-run observation.
 
 ---
 
+## Audit remediation — data structures, invalid states, fail-open defaults
+
+**Status:** Complete
+
+The slice records above are kept as written: they describe what each slice
+built at the time. Where this pass changed those shapes, the statement is
+listed under "Superseded statements" below rather than edited in place, so the
+slice history stays an accurate account of what happened.
+
+### What was built
+
+**Fail-open defaults (do-first band)**
+
+- **`.github/workflows/corsec-pipeline.yml`** — the six-hourly cron was **not**
+  dry-run despite the workflow declaring dry-run as the default. GitHub does not
+  populate the `inputs` context for a `schedule` event, so `inputs.dry_run`
+  expanded to `""`, the PR gate's `[ "$DRY_RUN" = "true" ]` check never fired,
+  and control fell through to `peter-evans/create-pull-request` — pushing a
+  branch and opening a PR unattended, every six hours. A "Resolve run mode" step
+  is now the single source of truth; it defaults the *shell* variable, and the
+  gate opens a PR only on an explicit `false`.
+- **`src/shared/spawnCapture.ts`** (new) — the four hand-rolled spawn wrappers
+  all closed with `exitCode: code ?? 0`, which converts a signal-killed child
+  (`code === null`) into a clean exit 0. For the patcher's shared test runner
+  that meant an OOM- or timeout-killed suite was recorded as
+  `patched-tests-passed` — the exact token the CI PR gate counts — producing a
+  PR whose body asserted "All tests passing". Now synthesises 128 + signal
+  number. Landed as two commits (extraction, then the signal fix) so a bisect
+  can separate them.
+- **`.webui_secret_key`** untracked and ignored.
+
+**Derived values stored beside their source**
+
+- **`CheckovReport.summary`, `TfsecReport.summary`, `CheckovFinding.result`**
+  deleted. Nothing read them, neither report is ever serialised, and `result`
+  was reachably wrong: an unrecognised `check_result.result` produced a row
+  marked `FAILED` sitting inside `passed[]`.
+- **`PatchSession.summary`** is now `{ total, byStatus }`. The old four counters
+  had no bucket for `skipped-already-resolved` while `attempted` counted it, so
+  the fields did not sum. Two artifacts in this repo already disagreed about
+  what `attempted` meant.
+- **`PatchResult.testOutput` → `PatchSession.testRun`.** It stored N
+  byte-identical copies of one shared string, and the type permitted N different
+  ones.
+- **`albCount` / `compliantCount` / `nonCompliantCount`** deleted; `imdsv2Counts`
+  derives them. Eight committed literals described accounts with compliant
+  Fargate services and an empty `checked` array.
+- **`emptyAggregatedReport()`** deleted — it restated the whole
+  `FindingCategory` taxonomy for a value that is exactly
+  `aggregateFindings(emptyCheckov, emptyTfsec, emptyAws)`, byte for byte.
+
+**Invalid states closed**
+
+- **`StageRecord`** is discriminated on `status`: a failed stage now *requires*
+  an `errorMessage`. That change immediately found a real gap — the
+  all-scanners-failed Cort record carried no message for the workflow's jq table.
+- **`PatchResult`** rows are materialised only once the test outcome is known,
+  so no row ever claims `patched-tests-passed` for an unspawned suite.
+- **Cort stage** collapses nine branch sites to one `settle()` per scanner, so a
+  `success` sub-stage beside a fallback empty report is unrepresentable.
+
+**Contracts that were fiction**
+
+- `--dry-run` is never branched on anywhere in `src/`. Kept (README and
+  `run-local.sh` pass it) but the summary field is renamed `dryRunRequested`,
+  which is what it records.
+- The `[stage:…]` "format must remain stable" comment was removed: no workflow
+  parses stdout.
+- `synthEmptyPatchSession`'s `errorMessage` parameter, which existed only to be
+  discarded with `void`, is gone.
+
+**Crash and silent-failure paths**
+
+- **`isAtLeast` / `isComparableVersion`** in `shared/semverRange.ts`. Three sites
+  compared two versions by concatenating one into a range string, inheriting
+  `isVersionInRange`'s throw-on-invalid-range contract. `patchedVersion` comes
+  straight from the GitHub Advisory API and is not validated semver, so one
+  Maven-style `1.2.3.RELEASE` identifier threw out of the entire patch stage and
+  every other package lost its patch.
+- **`src/hunter/advisorySource.ts`** (new) owns the replay contract. Recordings
+  are now an envelope carrying `recordedAt` / `sinceISO` / `ecosystem`, and the
+  fetcher **throws** on an ecosystem mismatch. Previously
+  `--ecosystem PIP --advisories-file <NPM recording>` filtered every node away
+  client-side and the pipeline reported "No vulnerabilities found" with exit 0.
+- **`composePR`** validates the fields it dereferences, so a malformed
+  `cort-report.json` names the file instead of throwing a bare `TypeError`.
+
+**Duplication owned once**
+
+- `ECOSYSTEMS` + `isEcosystem` in `hunter/types.ts` (was two byte-identical
+  guards, two copies of the error message, and one unchecked cast in `scripts/`).
+- `spawnCapture` (was four copies).
+- `tests/helpers/emptyReports.ts` and `tests/helpers/fakeLLMClient.ts`.
+
+**Test-suite growth:** 192 → 262 tests. New files: `spawnCapture.test.ts`,
+`advisorySource.test.ts`. New fixtures: `nested-package{,-lock}.json`
+(scoped / nested / declared-but-absent lockfile entries),
+`matches-non-semver-patch.json`.
+
+### Confirmed scope guards
+
+- **No CLAUDE.md hard-rule violations.** No direct `semver` calls added — the
+  two new comparison helpers live in `shared/semverRange.ts` and every caller
+  routes through them. No LLM calls added anywhere; the Reporter still makes at
+  most one per run. No Checkov/tfsec config moved into `src/`.
+- **`fixtures/recorded-advisories.json` was hand-wrapped, never re-recorded.**
+  It carries advisories for exactly the three packages `setup-sandbox.sh` pins,
+  out of 14 distinct packages; re-recording would roll the live query's
+  100-advisory window forward and most likely drop all three, turning
+  `run-local.sh` into a silent zero-match run. Byte-identity of the advisories
+  array was verified by SHA-256 before and after wrapping.
+- **`cort-report.json` stays readable by `decideMode`.** Its bytes are pinned by
+  a test, because drift there silently flips the pipeline into a billable LLM
+  call.
+- **`prompts/pr-description.md` untouched.** The model-facing contract is still
+  stated in counts; those are derived at the payload boundary instead of stored
+  upstream.
+
+### Deviations from the audit, with reasoning
+
+- **`isComparableVersion` was added beyond the audit's proposal.** The audit
+  specified only `isAtLeast`. But `isAtLeast` returns false both for "candidate
+  is lower" and "candidate is not comparable", and `pickHighest` must
+  distinguish them — otherwise an unparseable candidate displaces a usable
+  incumbent. One extra predicate, kept in the same module per the hard rule.
+- **The reporter fixtures were repaired, not merely stripped.** The audit's
+  proposal was to drop the count fields. Dropping them alone would have left
+  `checked: []`, silently converting four scenarios from "an account with N
+  Fargate services" to "an empty account". Each fixture now carries the services
+  its old counts claimed, so the scenarios still mean what their authors
+  intended.
+- **Cort's failure message is aggregated from the per-scanner errors.** The
+  audit's `StageRecord` narrowing was marked optional; taking it required
+  deciding what a failed Cort stage says. `settle()` now carries each error
+  rather than only logging it.
+- **F15 was implemented in its narrow form only.** The audit demoted the
+  file-loading/pure-core split because the payoff needs the orchestrator to adopt
+  the pure core — a separate change outside the owning subsystem. The concrete
+  defect it named (unguarded three-level dereference, `TypeError` with no file
+  path) is fixed at the existing boundary; the structural split is not done.
+- **S13 resolved as a documentation fix, not a wiring change.** `policies/` stays
+  as reserved scaffolding and CLAUDE.md now says so explicitly, rather than
+  stating a rule that points at a seam which does not exist.
+
+### Uncertainty about external system shapes
+
+- **The workflow changes are unverified against a real GitHub Actions run.**
+  Workflows are untested here and there is no local harness for them. The
+  `inputs`-is-empty-on-`schedule` behaviour is the documented GitHub semantics
+  and is the mechanism the audit identified, but the fix should be confirmed with
+  one `workflow_dispatch` at `dry_run=true` and then observed on the next cron
+  tick before the flag is ever flipped to live. **This is the single largest
+  remaining unknown in the pass.**
+- **`os.constants.signals` is the source for the signal-number mapping.** SIGKILL
+  → 137 and SIGTERM → 143 are asserted by tests that really spawn and kill a
+  child, so they are verified on this platform. Windows does not deliver POSIX
+  signals the same way; CI runs `ubuntu-latest`, so this is not currently
+  exercised anywhere it would differ.
+- **`fixtures/recorded-advisories.json`'s `recordedAt` / `sinceISO` are
+  reconstructed, not recorded.** The pre-envelope file carried no provenance, so
+  `recordedAt` is its filesystem mtime and `sinceISO` is derived from the
+  recorder's 30-day default. They are honest to within that; they are not
+  measurements.
+- **`AdvisoryRecording` provenance for MAVEN/PIP is untested end-to-end.** The
+  mismatch path is unit-tested, but no non-NPM recording exists to replay.
+
+### Superseded statements above
+
+- Slice 10 — `PatchSession`'s "5-field `summary`" is now `{ total, byStatus }`;
+  `testOutput` is no longer per-`PatchResult`; `pickHighest` routes through
+  `isAtLeast`, not `isVersionInRange`.
+- Slice 11 — `FakeLLMClient` now lives in `tests/helpers/`; the payload's
+  "patches drop `testOutput`" is now moot (no such field); `decideMode` reads
+  `checked.length` rather than reconstructing a total from two counts.
+- Slice 12 — "Dry-run is the default" was true of the dispatch input only, not
+  of the cron path; that is what the F18 fix corrects. The
+  `synthEmptyPatchSession` note about passing an `errorMessage` and discarding
+  it via `void` no longer applies — the parameter is gone.
+
+---
+
 ## Upcoming
 
 ### Real-world deployment

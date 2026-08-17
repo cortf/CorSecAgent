@@ -649,6 +649,59 @@ describe('composePR — LLM mode (tests-failed scenario)', () => {
 // Payload size assertion — proves the size guard is real, not aspirational.
 // -----------------------------------------------------------------------------
 
+describe('composePR — malformed input files (should throw, naming the file)', () => {
+  async function withInputs(
+    cortContents: string,
+  ): Promise<{ opts: Parameters<typeof composePR>[0]; cleanup: () => Promise<void> }> {
+    const dir = join(tmpdir(), `reporter-malformed-${randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+    const cortPath = join(dir, 'cort-report.json');
+    await writeFile(cortPath, cortContents, 'utf-8');
+    return {
+      opts: {
+        matchesPath: FIX.matchesClean,
+        cortReportPath: cortPath,
+        patchSessionPath: FIX.sessionClean,
+        outputPath: join(dir, 'pr-description.md'),
+      },
+      cleanup: () => rm(dir, { recursive: true, force: true }),
+    };
+  }
+
+  it('names the file and the missing field when the Cort report has no context block', async () => {
+    // Valid JSON that casts cleanly through readJson. Before the boundary
+    // check this reached decideMode's three-level dereference and threw a bare
+    // TypeError mentioning no file at all.
+    const { opts, cleanup } = await withInputs('{"findings": []}');
+    try {
+      await expect(composePR(opts)).rejects.toThrow(/context\.alb\.albArns/);
+      await expect(composePR(opts)).rejects.toThrow(opts.cortReportPath);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('names the file and the missing field when findings is absent', async () => {
+    const { opts, cleanup } = await withInputs('{}');
+    try {
+      await expect(composePR(opts)).rejects.toThrow(/"findings" array/);
+      await expect(composePR(opts)).rejects.toThrow(opts.cortReportPath);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('still names the file when the JSON itself is malformed', async () => {
+    const { opts, cleanup } = await withInputs('{not json');
+    try {
+      await expect(composePR(opts)).rejects.toThrow(/failed to parse JSON/);
+      await expect(composePR(opts)).rejects.toThrow(opts.cortReportPath);
+    } finally {
+      await cleanup();
+    }
+  });
+});
+
 describe('composePR — payload size budget', () => {
   it('throws when the serialized user-message exceeds 6000 chars', async () => {
     // Generate a synthetic over-budget matches payload by repeating a long

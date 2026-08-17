@@ -1,0 +1,1009 @@
+<title>CorSec Pipeline Map</title>
+
+<style>
+  /* ── tokens ─────────────────────────────────────────────────────────────
+     Light palette is defined on bare :root. Dark redefines ONLY tokens,
+     twice: once behind prefers-color-scheme (guarded so an explicit light
+     choice wins) and once behind the explicit dark stamp. No component
+     rule ever declares a colour outside this block. */
+  :root {
+    color-scheme: light dark;
+
+    --ground:      #eceff0;
+    --surface:     #ffffff;
+    --surface-2:   #f4f6f6;
+    --ink:         #101a1c;
+    --ink-soft:    #33474a;
+    --muted:       #5d7073;
+    --line:        #cdd6d6;
+    --line-soft:   #dee5e5;
+
+    /* semantic encoding, not decoration */
+    --flow:        #14706a;   /* deterministic path */
+    --flow-wash:   #dbeceb;
+    --llm:         #6a47a0;   /* the one non-deterministic surface */
+    --llm-wash:    #e8e1f4;
+
+    --ok:          #2f7a55;
+    --warn:        #8a6000;
+    --crit:        #a1322a;
+
+    --font-display: "Iowan Old Style", Charter, "Palatino Linotype", Palatino, Georgia, serif;
+    --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0e1517;
+      --surface:     #151f21;
+      --surface-2:   #1b2628;
+      --ink:         #e3eae9;
+      --ink-soft:    #bccac9;
+      --muted:       #8ea0a0;
+      --line:        #2c3b3d;
+      --line-soft:   #223032;
+
+      --flow:        #4fb5aa;
+      --flow-wash:   #16302f;
+      --llm:         #b08fe0;
+      --llm-wash:    #2a2340;
+
+      --ok:          #5fbf8a;
+      --warn:        #d3a63c;
+      --crit:        #e0705f;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0e1517;
+    --surface:     #151f21;
+    --surface-2:   #1b2628;
+    --ink:         #e3eae9;
+    --ink-soft:    #bccac9;
+    --muted:       #8ea0a0;
+    --line:        #2c3b3d;
+    --line-soft:   #223032;
+
+    --flow:        #4fb5aa;
+    --flow-wash:   #16302f;
+    --llm:         #b08fe0;
+    --llm-wash:    #2a2340;
+
+    --ok:          #5fbf8a;
+    --warn:        #d3a63c;
+    --crit:        #e0705f;
+  }
+
+  /* ── page ───────────────────────────────────────────────────────────── */
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    padding: 0 24px 96px;
+  }
+
+  .wrap {
+    max-width: 1160px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 72px;
+  }
+
+  .prose { max-width: 68ch; }
+
+  /* ── masthead ───────────────────────────────────────────────────────── */
+  header.masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 72px 0 0;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 40px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--flow);
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(38px, 5.4vw, 62px);
+    line-height: 1.02;
+    letter-spacing: -0.015em;
+    font-weight: 600;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  .standfirst {
+    font-family: var(--font-display);
+    font-size: clamp(17px, 2vw, 21px);
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 60ch;
+    text-wrap: pretty;
+  }
+
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    margin-top: 12px;
+  }
+  .fact { background: var(--surface); padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+  .fact dt {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .fact dd {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── section headings ───────────────────────────────────────────────── */
+  section { display: flex; flex-direction: column; gap: 24px; }
+
+  h2 {
+    font-family: var(--font-display);
+    font-size: clamp(25px, 3vw, 33px);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h2 .num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    color: var(--flow);
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 400;
+  }
+
+  h3 {
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 650;
+    margin: 0;
+    letter-spacing: -0.005em;
+  }
+
+  p { margin: 0; text-wrap: pretty; }
+  p + p { margin-top: 14px; }
+
+  code, .mono { font-family: var(--font-mono); font-size: 0.875em; }
+  code {
+    background: var(--surface-2);
+    border: 1px solid var(--line-soft);
+    padding: 0.1em 0.36em;
+    border-radius: 3px;
+    color: var(--ink-soft);
+  }
+
+  a { color: var(--flow); text-underline-offset: 3px; }
+  a:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--flow);
+    outline-offset: 3px;
+  }
+
+  /* ── figures ────────────────────────────────────────────────────────── */
+  figure {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .figframe {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    padding: 20px;
+    overflow-x: auto;
+  }
+  .figframe svg { display: block; width: 100%; min-width: 720px; height: auto; color: var(--ink); }
+  figcaption {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--muted);
+    max-width: 78ch;
+  }
+  figcaption b { color: var(--ink-soft); font-weight: 600; }
+
+  /* SVG primitives, driven entirely by tokens */
+  .n-box   { fill: var(--surface); stroke: var(--line); stroke-width: 1.25; }
+  .n-stage { fill: var(--surface-2); stroke: var(--flow); stroke-width: 1.5; }
+  .n-llm   { fill: var(--llm-wash); stroke: var(--llm); stroke-width: 1.5; }
+  .n-chip  { fill: var(--surface); stroke: var(--flow); stroke-width: 1.1; }
+  .n-chip-muted { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.1; }
+  .n-group { fill: none; stroke: var(--line); stroke-width: 1.25; stroke-dasharray: 5 4; }
+  .n-runner { fill: var(--surface-2); stroke: var(--flow); stroke-width: 1.5; stroke-dasharray: 6 4; }
+
+  .e-ctrl  { stroke: var(--ink); stroke-width: 1.6; fill: none; }
+  .e-write { stroke: var(--ink-soft); stroke-width: 1.4; fill: none; }
+  .e-read  { stroke: var(--flow); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+  .e-llm   { stroke: var(--llm); stroke-width: 1.5; fill: none; }
+  .e-soft  { stroke: var(--line); stroke-width: 1; fill: none; stroke-dasharray: 3 3; }
+
+  .t-title { font-family: var(--font-display); font-size: 17px; font-weight: 600; fill: var(--ink); }
+  .t-name  { font-family: var(--font-body); font-size: 12.5px; font-weight: 650; fill: var(--ink); }
+  .t-body  { font-family: var(--font-body); font-size: 10.5px; fill: var(--ink-soft); }
+  .t-code  { font-family: var(--font-mono); font-size: 9.5px; fill: var(--muted); }
+  .t-code-em { font-family: var(--font-mono); font-size: 10px; fill: var(--flow); }
+  .t-edge  { font-family: var(--font-mono); font-size: 9.5px; fill: var(--ink-soft); }
+  .t-tag   { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: 0.11em; fill: var(--flow); }
+  .t-tag-llm { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: 0.11em; fill: var(--llm); }
+  .t-group { font-family: var(--font-mono); font-size: 10px; fill: var(--muted); }
+
+  /* ── service cards ──────────────────────────────────────────────────── */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+  }
+  .card {
+    background: var(--surface);
+    padding: 22px 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .card-head { display: flex; flex-direction: column; gap: 5px; }
+  .card-head .path { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+  .card-head h3 { font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .card p { font-size: 13.5px; line-height: 1.55; color: var(--ink-soft); }
+
+  .io { display: flex; flex-direction: column; gap: 7px; margin-top: 2px; }
+  .io-row { display: grid; grid-template-columns: 52px 1fr; gap: 10px; align-items: baseline; }
+  .io-row dt {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .io-row dd { margin: 0; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-soft); line-height: 1.45; }
+
+  .pill {
+    align-self: flex-start;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+    background: var(--flow-wash);
+    color: var(--flow);
+    border: 1px solid var(--flow);
+  }
+  .pill.llm { background: var(--llm-wash); color: var(--llm); border-color: var(--llm); }
+
+  /* ── tables ─────────────────────────────────────────────────────────── */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  thead th {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 400;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.m, th.m { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-soft); }
+  td strong { font-weight: 650; color: var(--ink); }
+
+  .stat { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .stat.ok { color: var(--ok); }
+  .stat.warn { color: var(--warn); }
+  .stat.crit { color: var(--crit); }
+
+  /* ── legend ─────────────────────────────────────────────────────────── */
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 26px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; }
+  .swatch { display: inline-block; width: 26px; height: 0; border-top-width: 2px; border-top-style: solid; flex: 0 0 auto; }
+  .swatch.write { border-color: var(--ink-soft); }
+  .swatch.read { border-color: var(--flow); border-top-style: dashed; }
+  .swatch.ctrl { border-color: var(--ink); }
+  .swatch.llm { border-color: var(--llm); }
+
+  /* ── closing note ───────────────────────────────────────────────────── */
+  .note {
+    border-left: 2px solid var(--flow);
+    padding: 4px 0 4px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .note p { font-size: 14.5px; color: var(--ink-soft); max-width: 66ch; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 22px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 22px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Architecture reference · docs/architecture.html</div>
+    <h1>CorSec Pipeline Map</h1>
+    <p class="standfirst">
+      Four services, one ephemeral runner, and a directory of JSON files that is the only thing
+      holding them together. Everything is deterministic except one Claude call at the very end.
+    </p>
+    <dl class="facts">
+      <div class="fact"><dt>Services</dt><dd>4 + orchestrator</dd></div>
+      <div class="fact"><dt>Runtime</dt><dd>GitHub Actions</dd></div>
+      <div class="fact"><dt>Host</dt><dd>ubuntu-latest</dd></div>
+      <div class="fact"><dt>Schedule</dt><dd>0 */6 * * *</dd></div>
+      <div class="fact"><dt>LLM calls / run</dt><dd>0 or 1</dd></div>
+      <div class="fact"><dt>Long-lived AWS keys</dt><dd>none (OIDC)</dd></div>
+    </dl>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <section>
+    <div class="prose">
+      <h2><span class="num">01 — DATAFLOW</span>How the four services connect</h2>
+      <p>
+        The services never call each other. Each one writes a JSON file into <code>.corsec/</code> and
+        the next one reads it back off disk — so the connecting line between any two stages is
+        literally a file path and a TypeScript type. The vertical arrows on the left are
+        <em>ordering</em> only; the labels on them are the conditions under which the next stage runs
+        at all.
+      </p>
+    </div>
+
+    <figure>
+      <div class="figframe">
+        <svg viewBox="0 0 1060 800" role="img"
+             aria-label="Dataflow diagram: four pipeline stages run in sequence — Hunter, Cort, Patcher, Reporter — each fed by an external source on the left and each writing a JSON artifact into a shared .corsec directory on the right, which downstream stages read back off disk.">
+          <defs>
+            <marker id="f1-arw-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--ink)"/>
+            </marker>
+            <marker id="f1-arw-soft" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--ink-soft)"/>
+            </marker>
+            <marker id="f1-arw-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--flow)"/>
+            </marker>
+            <marker id="f1-arw-llm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--llm)"/>
+            </marker>
+          </defs>
+
+          <!-- ── column headers ── -->
+          <text class="t-group" x="40" y="34">EXTERNAL SOURCE</text>
+          <text class="t-group" x="300" y="34">SERVICE  ·  src/orchestrate.ts runs these in order, once each, no retries</text>
+          <text class="t-group" x="750" y="34">.corsec/  —  THE HAND-OFF BUS</text>
+
+          <!-- ── shared bus container ── -->
+          <rect class="n-group" x="742" y="52" width="298" height="700" rx="10"/>
+
+          <!-- ═══ HUNTER ═══ -->
+          <rect class="n-box" x="40" y="105" width="200" height="80" rx="6"/>
+          <text class="t-name" x="58" y="130">GitHub Advisory DB</text>
+          <text class="t-code" x="58" y="148">GraphQL v4 · @octokit</text>
+          <text class="t-code" x="58" y="164">auth: GITHUB_TOKEN</text>
+          <line class="e-write" x1="240" y1="145" x2="292" y2="145" marker-end="url(#f1-arw-soft)"/>
+
+          <rect class="n-stage" x="300" y="90" width="300" height="110" rx="6"/>
+          <text class="t-title" x="318" y="119">Hunter</text>
+          <text class="t-code" x="582" y="119" text-anchor="end">src/hunter/</text>
+          <text class="t-body" x="318" y="146">Pulls advisories published in the last 24 h,</text>
+          <text class="t-body" x="318" y="162">reads package-lock.json (never the ranges in</text>
+          <text class="t-body" x="318" y="178">package.json), semver-matches installed versions.</text>
+          <text class="t-tag" x="318" y="194">DETERMINISTIC</text>
+
+          <!-- ═══ CORT ═══ -->
+          <rect class="n-box" x="40" y="265" width="200" height="80" rx="6"/>
+          <text class="t-name" x="58" y="290">Terraform dir + AWS</text>
+          <text class="t-code" x="58" y="308">checkov -d · tfsec &lt;dir&gt;</text>
+          <text class="t-code" x="58" y="324">auth: OIDC → IAM role</text>
+          <line class="e-write" x1="240" y1="305" x2="292" y2="305" marker-end="url(#f1-arw-soft)"/>
+
+          <rect class="n-stage" x="300" y="250" width="300" height="110" rx="6"/>
+          <text class="t-title" x="318" y="279">Cort</text>
+          <text class="t-code" x="582" y="279" text-anchor="end">src/cort/</text>
+          <text class="t-body" x="318" y="306">Runs Checkov, tfsec and read-only AWS context</text>
+          <text class="t-body" x="318" y="322">checks in parallel, then dedupes findings on</text>
+          <text class="t-body" x="318" y="338">(category, resource) — highest severity wins.</text>
+          <text class="t-tag" x="318" y="354">DETERMINISTIC</text>
+
+          <!-- ═══ PATCHER ═══ -->
+          <rect class="n-box" x="40" y="425" width="200" height="80" rx="6"/>
+          <text class="t-name" x="58" y="450">npm registry + git</text>
+          <text class="t-code" x="58" y="468">npm install pkg@^ver</text>
+          <text class="t-code" x="58" y="484">git checkout -b corsec/…</text>
+          <line class="e-write" x1="240" y1="465" x2="292" y2="465" marker-end="url(#f1-arw-soft)"/>
+
+          <rect class="n-stage" x="300" y="410" width="300" height="110" rx="6"/>
+          <text class="t-title" x="318" y="439">Patcher</text>
+          <text class="t-code" x="582" y="439" text-anchor="end">src/patcher/</text>
+          <text class="t-body" x="318" y="466">Consolidates matches per package, cuts one</text>
+          <text class="t-body" x="318" y="482">branch, installs the patched range, then runs</text>
+          <text class="t-body" x="318" y="498">the test suite exactly once for the whole set.</text>
+          <text class="t-tag" x="318" y="514">DETERMINISTIC · MUTATES WORKSPACE</text>
+
+          <!-- ═══ REPORTER ═══ -->
+          <rect class="n-box" x="40" y="585" width="200" height="80" rx="6"/>
+          <text class="t-name" x="58" y="610">Anthropic API</text>
+          <text class="t-code" x="58" y="628">claude-sonnet-4-6</text>
+          <text class="t-code" x="58" y="644">auth: ANTHROPIC_API_KEY</text>
+          <line class="e-llm" x1="240" y1="625" x2="292" y2="625" marker-end="url(#f1-arw-llm)"/>
+
+          <rect class="n-llm" x="300" y="570" width="300" height="110" rx="6"/>
+          <text class="t-title" x="318" y="599">Reporter</text>
+          <text class="t-code" x="582" y="599" text-anchor="end">src/reporter/</text>
+          <text class="t-body" x="318" y="626">Decides template vs LLM mode from the inputs;</text>
+          <text class="t-body" x="318" y="642">makes at most one Claude call; rejects output</text>
+          <text class="t-body" x="318" y="658">missing any of the five required headers.</text>
+          <text class="t-tag-llm" x="318" y="674">THE ONLY LLM TOUCHPOINT IN THE RUN</text>
+
+          <!-- ── control flow between stages ── -->
+          <line class="e-ctrl" x1="345" y1="200" x2="345" y2="244" marker-end="url(#f1-arw-ink)"/>
+          <text class="t-edge" x="362" y="219">gate: matchCount &gt; 0</text>
+          <text class="t-edge" x="362" y="233">0 matches → exit 0, stop here</text>
+
+          <line class="e-ctrl" x1="345" y1="360" x2="345" y2="404" marker-end="url(#f1-arw-ink)"/>
+          <text class="t-edge" x="362" y="379">always — one failed scanner</text>
+          <text class="t-edge" x="362" y="393">degrades to an empty report</text>
+
+          <line class="e-ctrl" x1="345" y1="520" x2="345" y2="564" marker-end="url(#f1-arw-ink)"/>
+          <text class="t-edge" x="362" y="539">always — a throw becomes a</text>
+          <text class="t-edge" x="362" y="553">synthetic empty PatchSession</text>
+
+          <!-- ── artifact chips on the bus ── -->
+          <rect class="n-chip" x="758" y="121" width="266" height="48" rx="5"/>
+          <text class="t-code-em" x="774" y="141">hunter-matches.json</text>
+          <text class="t-code" x="774" y="157">MatchedThreat[]</text>
+
+          <rect class="n-chip" x="758" y="281" width="266" height="48" rx="5"/>
+          <text class="t-code-em" x="774" y="301">cort-report.json</text>
+          <text class="t-code" x="774" y="317">AggregatedReport</text>
+
+          <rect class="n-chip" x="758" y="441" width="266" height="48" rx="5"/>
+          <text class="t-code-em" x="774" y="461">patch-session.json</text>
+          <text class="t-code" x="774" y="477">PatchSession</text>
+
+          <rect class="n-chip" x="758" y="601" width="266" height="48" rx="5"/>
+          <text class="t-code-em" x="774" y="621">pr-description.md</text>
+          <text class="t-code" x="774" y="637">5 mandatory ## headers</text>
+
+          <rect class="n-chip-muted" x="758" y="672" width="266" height="48" rx="5"/>
+          <text class="t-code" x="774" y="692">orchestration-summary.json</text>
+          <text class="t-code" x="774" y="708">stage table · tokens · exit code</text>
+          <text class="t-code" x="758" y="738">written by the orchestrator every run,</text>
+          <text class="t-code" x="758" y="750">success or failure</text>
+
+          <!-- ── writes: stage → chip ── -->
+          <line class="e-write" x1="600" y1="145" x2="754" y2="145" marker-end="url(#f1-arw-soft)"/>
+          <line class="e-write" x1="600" y1="305" x2="754" y2="305" marker-end="url(#f1-arw-soft)"/>
+          <line class="e-write" x1="600" y1="465" x2="754" y2="465" marker-end="url(#f1-arw-soft)"/>
+          <line class="e-write" x1="600" y1="625" x2="754" y2="625" marker-end="url(#f1-arw-soft)"/>
+
+          <!-- ── read rail 1: hunter-matches → Patcher ── -->
+          <polyline class="e-read" points="758,160 712,160 712,442 606,442" marker-end="url(#f1-arw-flow)"/>
+
+          <!-- ── read rail 2: all three inputs → Reporter ── -->
+          <polyline class="e-read" points="758,132 660,132 660,608 606,608" marker-end="url(#f1-arw-flow)"/>
+          <line class="e-read" x1="758" y1="292" x2="662" y2="292"/>
+          <line class="e-read" x1="758" y1="452" x2="662" y2="452"/>
+
+          <!-- ── legend ── -->
+          <line class="e-ctrl" x1="40" y1="775" x2="72" y2="775"/>
+          <text class="t-code" x="80" y="779">stage order</text>
+          <line class="e-write" x1="200" y1="775" x2="232" y2="775"/>
+          <text class="t-code" x="240" y="779">writes to .corsec/</text>
+          <line class="e-read" x1="400" y1="775" x2="432" y2="775"/>
+          <text class="t-code" x="440" y="779">reads back off disk</text>
+          <line class="e-llm" x1="610" y1="775" x2="642" y2="775"/>
+          <text class="t-code" x="650" y="779">non-deterministic (LLM)</text>
+        </svg>
+      </div>
+      <figcaption>
+        <b>Nothing in the middle column imports anything from another stage.</b> The coupling is entirely
+        file-shaped. The upper dashed rail carries <span class="mono">hunter-matches.json</span> back to Patcher;
+        the lower one taps all three JSON artifacts and hands them to Reporter as
+        <span class="mono">matchesPath</span>, <span class="mono">cortReportPath</span> and
+        <span class="mono">patchSessionPath</span>. The workflow's PR gate reads the same
+        <span class="mono">patch-session.json</span> with <span class="mono">jq</span>. That is why a stage can fail
+        without taking the run down — the next one simply reads a synthetic or empty file instead.
+      </figcaption>
+    </figure>
+
+    <div class="legend">
+      <span><i class="swatch ctrl"></i> sequencing</span>
+      <span><i class="swatch write"></i> write</span>
+      <span><i class="swatch read"></i> read</span>
+      <span><i class="swatch llm"></i> LLM boundary</span>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <section>
+    <div class="prose">
+      <h2><span class="num">02 — SERVICES</span>What each one is responsible for</h2>
+      <p>
+        Three deterministic services and one that is allowed to be creative, in a tightly fenced way.
+        The rule in <code>CLAUDE.md</code> is that an LLM may only touch unstructured-text extraction
+        in Hunter (not yet built) and the final PR description in Reporter — nowhere else.
+      </p>
+    </div>
+
+    <div class="cards">
+      <article class="card">
+        <div class="card-head">
+          <span class="path">src/hunter/</span>
+          <h3>Hunter</h3>
+        </div>
+        <p>
+          Queries the GitHub Advisory database over GraphQL for advisories published since
+          <span class="mono">T&minus;24 h</span>, resolves the union of <span class="mono">dependencies</span> and
+          <span class="mono">devDependencies</span> against the npm v7+ lockfile, and emits one row per
+          installed package × matching vulnerable range. Multi-node advisories produce multiple rows.
+        </p>
+        <dl class="io">
+          <div class="io-row"><dt>In</dt><dd>GitHub GraphQL · package.json · package-lock.json</dd></div>
+          <div class="io-row"><dt>Out</dt><dd>hunter-matches.json &rarr; MatchedThreat[]</dd></div>
+          <div class="io-row"><dt>Fails</dt><dd>aborts the run, exit 1</dd></div>
+        </dl>
+        <span class="pill">Deterministic</span>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <span class="path">src/cort/</span>
+          <h3>Cort</h3>
+        </div>
+        <p>
+          Fans out to three independent probes under <span class="mono">Promise.allSettled</span>: Checkov and
+          tfsec over the Terraform directory, plus read-only AWS context (ALB presence, and Fargate
+          IMDSv2 enforcement inferred from each service's <span class="mono">platformVersion</span>, not from the
+          task definition). Findings are then merged on <span class="mono">(category, resource)</span>.
+        </p>
+        <dl class="io">
+          <div class="io-row"><dt>In</dt><dd>terraform_dir · ECS + ELBv2 Describe* calls</dd></div>
+          <div class="io-row"><dt>Out</dt><dd>cort-report.json &rarr; AggregatedReport</dd></div>
+          <div class="io-row"><dt>Fails</dt><dd>per-probe; run continues</dd></div>
+        </dl>
+        <span class="pill">Deterministic</span>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <span class="path">src/patcher/</span>
+          <h3>Patcher</h3>
+        </div>
+        <p>
+          Collapses every match for a package into one upgrade (highest patched version; the whole
+          group is marked <span class="mono">no-fix</span> if any match lacks one), re-reads the lockfile to skip
+          already-resolved entries, cuts a branch only if there is real work, then installs and runs the
+          test command once for the whole batch.
+        </p>
+        <dl class="io">
+          <div class="io-row"><dt>In</dt><dd>hunter-matches.json · npm registry · git</dd></div>
+          <div class="io-row"><dt>Out</dt><dd>patch-session.json &rarr; PatchSession</dd></div>
+          <div class="io-row"><dt>Fails</dt><dd>synthetic empty session on disk</dd></div>
+        </dl>
+        <span class="pill">Deterministic</span>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <span class="path">src/reporter/</span>
+          <h3>Reporter</h3>
+        </div>
+        <p>
+          Chooses template mode when everything is boring (all patches green, zero Cort findings, no
+          non-compliant IMDSv2) and skips the API entirely. Otherwise it trims the three inputs to a
+          payload asserted under 6 000 characters, makes one call, and refuses any response whose five
+          headers are missing or out of order.
+        </p>
+        <dl class="io">
+          <div class="io-row"><dt>In</dt><dd>all three JSON artifacts · Anthropic API</dd></div>
+          <div class="io-row"><dt>Out</dt><dd>pr-description.md</dd></div>
+          <div class="io-row"><dt>Fails</dt><dd>aborts, exit 1 — artifacts kept</dd></div>
+        </dl>
+        <span class="pill llm">One LLM call</span>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <span class="path">src/orchestrate.ts</span>
+          <h3>Orchestrator</h3>
+        </div>
+        <p>
+          Not a service so much as the wiring: it owns the output directory, runs each stage exactly
+          once, converts every non-fatal failure into an empty-but-valid input for the next stage, wraps
+          the LLM client to total up tokens, and writes the run summary before every exit path
+          including the aborts.
+        </p>
+        <dl class="io">
+          <div class="io-row"><dt>In</dt><dd>CLI flags · every stage function (injectable)</dd></div>
+          <div class="io-row"><dt>Out</dt><dd>orchestration-summary.json · exit code</dd></div>
+          <div class="io-row"><dt>Fails</dt><dd>&mdash;</dd></div>
+        </dl>
+        <span class="pill">Deterministic</span>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <span class="path">src/shared/</span>
+          <h3>Shared substrate</h3>
+        </div>
+        <p>
+          Two modules every service is required to route through.
+          <span class="mono">semverRange.ts</span> is the single place allowed to touch <span class="mono">semver</span> —
+          Hunter's matching, Patcher's "pick highest", and Cort's Fargate platform-version compare all
+          call it. <span class="mono">llmClient.ts</span> is the single seam the Anthropic SDK sits behind.
+        </p>
+        <dl class="io">
+          <div class="io-row"><dt>Rule</dt><dd>no direct semver calls in feature code</dd></div>
+          <div class="io-row"><dt>Rule</dt><dd>no LLM calls outside Reporter</dd></div>
+          <div class="io-row"><dt>Tests</dt><dd>vitest · injected clients, never vi.mock</dd></div>
+        </dl>
+        <span class="pill">Deterministic</span>
+      </article>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <section>
+    <div class="prose">
+      <h2><span class="num">03 — CONTRACTS</span>What is actually on the connecting lines</h2>
+      <p>
+        Every edge in the first diagram is one row of this table. Change a type here and you have
+        changed an integration, even though no import statement moved.
+      </p>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Producer</th>
+            <th>File in <span class="mono">.corsec/</span></th>
+            <th>Type</th>
+            <th>Read by</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Hunter</strong></td>
+            <td class="m">hunter-matches.json</td>
+            <td class="m">MatchedThreat[]</td>
+            <td>Patcher, Reporter</td>
+          </tr>
+          <tr>
+            <td><strong>Cort</strong></td>
+            <td class="m">cort-report.json</td>
+            <td class="m">AggregatedReport</td>
+            <td>Reporter</td>
+          </tr>
+          <tr>
+            <td><strong>Patcher</strong></td>
+            <td class="m">patch-session.json</td>
+            <td class="m">PatchSession</td>
+            <td>Reporter, and the workflow's PR gate via <span class="mono">jq</span></td>
+          </tr>
+          <tr>
+            <td><strong>Reporter</strong></td>
+            <td class="m">pr-description.md</td>
+            <td class="m">markdown, 5 fixed headers</td>
+            <td><span class="mono">create-pull-request</span> as <span class="mono">body-path</span></td>
+          </tr>
+          <tr>
+            <td><strong>Orchestrator</strong></td>
+            <td class="m">orchestration-summary.json</td>
+            <td class="m">OrchestrationSummary</td>
+            <td>job-summary step, and the process exit code</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <section>
+    <div class="prose">
+      <h2><span class="num">04 — DEPLOYMENT</span>Where this runs and how it gets there</h2>
+      <p>
+        There is no server, no container registry, and nothing to deploy in the usual sense. The unit of
+        deployment is <code>.github/workflows/corsec-pipeline.yml</code> merged to <code>main</code>. Every run
+        provisions a fresh GitHub-hosted VM, installs its own toolchain, does the work, ships two
+        outputs, and is destroyed. Credentials are minted per-run and expire with the job.
+      </p>
+    </div>
+
+    <figure>
+      <div class="figframe">
+        <svg viewBox="0 0 1200 740" role="img"
+             aria-label="Deployment diagram: a cron schedule or manual dispatch starts an ephemeral ubuntu-latest GitHub Actions runner, which provisions Node, Python with Checkov, a pinned tfsec binary and short-lived AWS credentials before running the orchestrator; it egresses to four external endpoints over HTTPS and emits a workflow artifact, a job summary, and a gated pull request.">
+          <defs>
+            <marker id="f2-arw-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--ink)"/>
+            </marker>
+            <marker id="f2-arw-soft" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--ink-soft)"/>
+            </marker>
+            <marker id="f2-arw-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--flow)"/>
+            </marker>
+            <marker id="f2-arw-llm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--llm)"/>
+            </marker>
+          </defs>
+
+          <text class="t-group" x="30" y="34">TRIGGER</text>
+          <text class="t-group" x="290" y="34">EPHEMERAL COMPUTE — created per run, destroyed at the end</text>
+          <text class="t-group" x="880" y="34">EGRESS · HTTPS ONLY, NO INBOUND</text>
+
+          <!-- ── triggers ── -->
+          <rect class="n-box" x="30" y="96" width="210" height="70" rx="6"/>
+          <text class="t-name" x="48" y="122">schedule</text>
+          <text class="t-code" x="48" y="140">cron: 0 */6 * * *</text>
+          <text class="t-code" x="48" y="155">corsec-pipeline.yml</text>
+          <line class="e-ctrl" x1="240" y1="131" x2="286" y2="131" marker-end="url(#f2-arw-ink)"/>
+
+          <rect class="n-box" x="30" y="196" width="210" height="70" rx="6"/>
+          <text class="t-name" x="48" y="222">workflow_dispatch</text>
+          <text class="t-code" x="48" y="240">dry_run (default true)</text>
+          <text class="t-code" x="48" y="255">terraform_dir (optional)</text>
+          <line class="e-ctrl" x1="240" y1="231" x2="286" y2="231" marker-end="url(#f2-arw-ink)"/>
+
+          <rect class="n-box" x="30" y="296" width="210" height="70" rx="6"/>
+          <text class="t-name" x="48" y="322">push · pull_request</text>
+          <text class="t-code" x="48" y="340">ci.yml — separate job</text>
+          <text class="t-code" x="48" y="355">typecheck + 192 vitest</text>
+          <line class="e-soft" x1="135" y1="366" x2="135" y2="404"/>
+          <text class="t-code" x="30" y="422">gate on the code itself,</text>
+          <text class="t-code" x="30" y="436">not on the pipeline run</text>
+
+          <!-- ── runner ── -->
+          <rect class="n-runner" x="290" y="52" width="530" height="600" rx="10"/>
+          <text class="t-name" x="310" y="80">GitHub-hosted runner · ubuntu-latest</text>
+          <text class="t-code" x="310" y="98">single job · timeout-minutes: 30 · permissions: id-token / contents / pull-requests: write</text>
+
+          <rect class="n-box" x="310" y="118" width="490" height="42" rx="5"/>
+          <text class="t-code-em" x="326" y="136">actions/checkout@v4</text>
+          <text class="t-code" x="326" y="151">repo + lockfiles into the workspace</text>
+
+          <rect class="n-box" x="310" y="172" width="490" height="42" rx="5"/>
+          <text class="t-code-em" x="326" y="190">actions/setup-node@v4 · Node 22</text>
+          <text class="t-code" x="326" y="205">npm cache keyed on package-lock.json</text>
+
+          <rect class="n-box" x="310" y="226" width="490" height="42" rx="5"/>
+          <text class="t-code-em" x="326" y="244">actions/setup-python@v5 · 3.12 → pip install checkov</text>
+          <text class="t-code" x="326" y="259">Cort's first IaC scanner</text>
+
+          <rect class="n-box" x="310" y="280" width="490" height="42" rx="5"/>
+          <text class="t-code-em" x="326" y="298">curl tfsec v1.28.14 → /usr/local/bin/tfsec</text>
+          <text class="t-code" x="326" y="313">pinned asset — the upstream installer hits a rate-limited API</text>
+
+          <rect class="n-box" x="310" y="334" width="490" height="42" rx="5"/>
+          <text class="t-code-em" x="326" y="352">aws-actions/configure-aws-credentials@v4</text>
+          <text class="t-code" x="326" y="367">skipped entirely when AWS_AUDIT_ROLE_ARN is unset</text>
+
+          <rect class="n-box" x="310" y="388" width="490" height="42" rx="5"/>
+          <text class="t-code-em" x="326" y="406">npm ci</text>
+          <text class="t-code" x="326" y="421">exact lockfile install</text>
+
+          <rect class="n-stage" x="310" y="442" width="490" height="58" rx="5"/>
+          <text class="t-name" x="326" y="464">npx tsx src/orchestrate.ts</text>
+          <text class="t-code" x="326" y="481">--output-dir .corsec --ecosystem NPM [--terraform-dir …] [--dry-run]</text>
+          <text class="t-code" x="326" y="494">Hunter → Cort → Patcher → Reporter, writing into .corsec/</text>
+
+          <rect class="n-box" x="310" y="512" width="490" height="42" rx="5"/>
+          <text class="t-code-em" x="326" y="530">actions/upload-artifact@v4 · if: always()</text>
+          <text class="t-code" x="326" y="545">runs even when the orchestrator exits non-zero</text>
+
+          <rect class="n-box" x="310" y="566" width="490" height="42" rx="5"/>
+          <text class="t-code-em" x="326" y="584">jq gate → peter-evans/create-pull-request@v6</text>
+          <text class="t-code" x="326" y="599">the only step that is skipped in dry-run mode</text>
+
+          <text class="t-code" x="310" y="628">VM and every credential on it are discarded when the job ends.</text>
+          <text class="t-code" x="310" y="642">No state survives except the two outputs below.</text>
+
+          <!-- ── egress ── -->
+          <rect class="n-box" x="880" y="110" width="290" height="66" rx="6"/>
+          <text class="t-name" x="898" y="134">GitHub GraphQL API</text>
+          <text class="t-code" x="898" y="152">securityAdvisories(first: 100)</text>
+          <text class="t-code" x="898" y="167">GITHUB_TOKEN, auto-injected</text>
+          <line class="e-write" x1="824" y1="143" x2="876" y2="143" marker-end="url(#f2-arw-soft)"/>
+
+          <rect class="n-box" x="880" y="212" width="290" height="66" rx="6"/>
+          <text class="t-name" x="898" y="236">AWS account</text>
+          <text class="t-code" x="898" y="254">AssumeRoleWithWebIdentity → Describe*</text>
+          <text class="t-code" x="898" y="269">short-lived · read-only · no stored keys</text>
+          <line class="e-write" x1="824" y1="245" x2="876" y2="245" marker-end="url(#f2-arw-soft)"/>
+
+          <rect class="n-box" x="880" y="314" width="290" height="66" rx="6"/>
+          <text class="t-name" x="898" y="338">npm registry</text>
+          <text class="t-code" x="898" y="356">package tarballs for npm ci + install</text>
+          <text class="t-code" x="898" y="371">anonymous</text>
+          <line class="e-write" x1="824" y1="347" x2="876" y2="347" marker-end="url(#f2-arw-soft)"/>
+
+          <rect class="n-llm" x="880" y="416" width="290" height="66" rx="6"/>
+          <text class="t-name" x="898" y="440">Anthropic API</text>
+          <text class="t-code" x="898" y="458">messages.create · claude-sonnet-4-6</text>
+          <text class="t-code" x="898" y="473">ANTHROPIC_API_KEY · 0 or 1 call per run</text>
+          <line class="e-llm" x1="824" y1="449" x2="876" y2="449" marker-end="url(#f2-arw-llm)"/>
+
+          <!-- ── outputs ── -->
+          <rect class="n-chip" x="880" y="530" width="290" height="60" rx="6"/>
+          <text class="t-code-em" x="898" y="552">corsec-artifacts</text>
+          <text class="t-code" x="898" y="568">all five files · uploaded every run</text>
+          <text class="t-code" x="898" y="582">this is the whole deliverable in dry-run</text>
+          <polyline class="e-write" points="800,533 850,533 850,556 876,556" marker-end="url(#f2-arw-soft)"/>
+
+          <rect class="n-chip" x="880" y="614" width="290" height="76" rx="6"/>
+          <text class="t-code-em" x="898" y="636">Pull request</text>
+          <text class="t-code" x="898" y="652">labels: security, automated</text>
+          <text class="t-code" x="898" y="667">body = pr-description.md</text>
+          <text class="t-code" x="898" y="682">branch = corsec/… from the PatchSession</text>
+          <polyline class="e-ctrl" points="800,587 850,587 850,644 876,644" marker-end="url(#f2-arw-ink)"/>
+          <text class="t-edge" x="846" y="608" text-anchor="end">only if dry_run == false</text>
+          <text class="t-edge" x="846" y="622" text-anchor="end">AND ≥1 patched-tests-passed</text>
+
+          <!-- boundary rule -->
+          <line class="e-soft" x1="850" y1="52" x2="850" y2="500"/>
+        </svg>
+      </div>
+      <figcaption>
+        <b>Deployment is a merge, not a release.</b> The runner installs its own toolchain from scratch on
+        every invocation — pinned <span class="mono">tfsec v1.28.14</span> rather than "latest", because the upstream
+        installer resolves the release through an unauthenticated GitHub API call that gets rate-limited
+        on shared runner IPs. AWS access is federated per-run through OIDC, so no long-lived key exists
+        anywhere to leak.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <section>
+    <div class="prose">
+      <h2><span class="num">05 — CREDENTIALS</span>What crosses the boundary, and with what authority</h2>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Credential</th><th>Supplied by</th><th>Authority</th><th>Used by</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="m">GITHUB_TOKEN</td>
+            <td>Actions, automatically</td>
+            <td class="m">contents: write · pull-requests: write · id-token: write, job-scoped</td>
+            <td>Hunter's advisory query, and the PR step</td>
+          </tr>
+          <tr>
+            <td class="m">AWS_AUDIT_ROLE_ARN</td>
+            <td>repo secret &rarr; OIDC assume-role</td>
+            <td class="m">elasticloadbalancing:DescribeLoadBalancers · ecs:ListClusters · ListServices · DescribeServices</td>
+            <td>Cort's AWS context checks</td>
+          </tr>
+          <tr>
+            <td class="m">ANTHROPIC_API_KEY</td>
+            <td>repo secret &rarr; step env</td>
+            <td class="m">messages.create only</td>
+            <td>Reporter, at most once per run</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose" style="font-size:14px;color:var(--muted);">
+      Cort never mutates AWS state — the entire IAM policy is <span class="mono">Describe*</span>. The trust policy
+      scopes the federated identity with a <span class="mono">StringLike</span> on
+      <span class="mono">token.actions.githubusercontent.com:sub</span>, which can be tightened from
+      <span class="mono">repo:OWNER/REPO:*</span> to a single ref if you only ever want scheduled runs on
+      <span class="mono">main</span> to hold credentials.
+    </p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <section>
+    <div class="prose">
+      <h2><span class="num">06 — FAILURE</span>What happens when a connection breaks</h2>
+      <p>
+        Only two stages can end the run. Everything else degrades into a valid-but-empty input so the
+        remaining stages still produce something a human can read.
+      </p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Condition</th><th>Behaviour</th><th>Run</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Hunter throws</td>
+            <td>summary written, no later stage invoked</td>
+            <td><span class="stat crit">exit 1</span></td>
+          </tr>
+          <tr>
+            <td>Hunter finds zero matches</td>
+            <td>nothing to patch; stops cleanly before Cort</td>
+            <td><span class="stat ok">exit 0</span></td>
+          </tr>
+          <tr>
+            <td>Checkov, tfsec or AWS probe fails</td>
+            <td>that probe degrades to an empty report; the other two still aggregate</td>
+            <td><span class="stat warn">continues</span></td>
+          </tr>
+          <tr>
+            <td>No <span class="mono">terraform_dir</span> supplied</td>
+            <td>Cort skipped entirely; an empty <span class="mono">AggregatedReport</span> is still persisted</td>
+            <td><span class="stat warn">continues</span></td>
+          </tr>
+          <tr>
+            <td>Patcher throws</td>
+            <td>synthetic empty <span class="mono">PatchSession</span> written to disk so Reporter can still read it</td>
+            <td><span class="stat warn">continues</span></td>
+          </tr>
+          <tr>
+            <td>Reporter's output fails header validation</td>
+            <td>no repair attempted; all upstream artifacts are preserved and uploaded</td>
+            <td><span class="stat crit">exit 1</span></td>
+          </tr>
+          <tr>
+            <td>No <span class="mono">ANTHROPIC_API_KEY</span>, template mode chosen</td>
+            <td>the API is never called; deterministic markdown is rendered instead</td>
+            <td><span class="stat ok">exit 0</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <p>
+        <strong>Dry-run is the default and should stay that way for a while.</strong> With
+        <span class="mono">dry_run: true</span> the pipeline produces and uploads every artifact but pushes no
+        branch and opens no PR. The recommendation in the README is at least a week of six-hourly runs
+        read like a code review before flipping it — watching the <span class="mono">[llm-cost]</span> line for
+        token drift, the stage-duration table for flakiness, and <span class="mono">pr-description.md</span> for
+        invented facts.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <span>CorSecAgent · docs/architecture.html</span>
+    <span>source of truth: src/orchestrate.ts · .github/workflows/corsec-pipeline.yml</span>
+    <span>192 tests · vitest</span>
+  </footer>
+
+</div>

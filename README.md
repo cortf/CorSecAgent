@@ -83,6 +83,18 @@ The workflow's `dry_run` input defaults to `true`. In dry-run mode every
 artifact is produced and uploaded as a workflow artifact, but **no branch is
 pushed and no PR is opened**.
 
+Dry run is resolved once, in the workflow's "Resolve run mode" step, and every
+later step reads that step's output. This matters because GitHub does not
+populate the `inputs` context for `schedule` events — the input's own
+`default: true` applies to `workflow_dispatch` only, so the scheduled run needs
+the shell variable defaulted as well. The PR gate is written to fail closed: it
+opens a PR only on an explicit `false`.
+
+Note that the orchestrator's `--dry-run` flag is **observability, not
+enforcement**. It is recorded in the summary artifact as `dryRunRequested` and
+is not branched on anywhere in `src/`; the Patcher never pushes by design, and
+the workflow's PR gate is the control that actually decides.
+
 **Run in dry-run for at least a week before flipping to live.** During that
 week:
 
@@ -111,7 +123,7 @@ enough to auto-merge based on the `automated,security` labels.
 | `.corsec/cort-report.json` | Cort | `AggregatedReport` — IaC findings + AWS context (or empty if no `terraform_dir`). |
 | `.corsec/patch-session.json` | Patcher | `PatchSession` — per-package install + test outcomes. |
 | `.corsec/pr-description.md` | Reporter | Five-section markdown used as the PR body in live mode. |
-| `.corsec/orchestration-summary.json` | Orchestrator | Stage durations, statuses, LLM token totals, branch name, dry-run flag, final exit code. |
+| `.corsec/orchestration-summary.json` | Orchestrator | Stage durations, statuses, LLM token totals, branch name, `dryRunRequested`, final exit code. |
 
 All five are uploaded as a single `corsec-artifacts` artifact regardless of
 exit code, so dry-run inspection is straightforward.
