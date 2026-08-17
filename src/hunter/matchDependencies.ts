@@ -51,18 +51,30 @@ export async function loadInstalledVersions(
     throw new Error(`Malformed JSON in ${lockfilePath}`);
   }
 
-  const declared = new Set<string>([
+  // Iterate the declared names and index into the lockfile, rather than
+  // scanning every lockfile entry and filtering it against a declared-names Set.
+  //
+  // Direct dependencies are hoisted to the lockfile root, so a declared name IS
+  // the key: `node_modules/<name>`. Scanning the other way round meant
+  // reconstructing names by stripping one 'node_modules/' prefix, which on a
+  // real lockfile (219 entries here, 30 of them nested) built and probed
+  // meaningless strings like "vite/node_modules/@types/node" — questions with
+  // no answer, since npm names cannot contain '/' outside a scope prefix. 209
+  // of 219 entries were examined only to be discarded.
+  //
+  // Indexing in also makes the direct-deps-only scope visible in the shape of
+  // the code rather than emergent from a filter.
+  const declared = [
     ...Object.keys(pkg.dependencies ?? {}),
     ...Object.keys(pkg.devDependencies ?? {}),
-  ]);
+  ];
 
+  const packages = lock.packages ?? {};
   const result = new Map<string, string>();
-  for (const [key, entry] of Object.entries(lock.packages ?? {})) {
-    if (!key.startsWith('node_modules/')) continue;
-    const name = key.slice('node_modules/'.length);
-    if (!declared.has(name)) continue;
-    if (entry.version !== undefined) {
-      result.set(name, entry.version);
+  for (const name of declared) {
+    const version = packages[`node_modules/${name}`]?.version;
+    if (version !== undefined) {
+      result.set(name, version);
     }
   }
 

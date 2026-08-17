@@ -52,6 +52,60 @@ describe('loadInstalledVersions — declared direct dependencies', () => {
 });
 
 // ---------------------------------------------------------------------------
+// loadInstalledVersions — lockfile shapes the simple fixtures do not cover
+// ---------------------------------------------------------------------------
+
+describe('loadInstalledVersions — scoped, nested, and declared-but-absent entries', () => {
+  const nested = () =>
+    loadInstalledVersions(fix('nested-package.json'), fix('nested-package-lock.json'));
+
+  it('resolves a scoped package from its hoisted root entry (@scope/pkg)', async () => {
+    const installed = await nested();
+    expect(installed.get('@scope/pkg')).toBe('2.1.4');
+  });
+
+  it('resolves a scoped devDependency the same way (@types/node)', async () => {
+    const installed = await nested();
+    expect(installed.get('@types/node')).toBe('22.13.1');
+  });
+
+  it('takes the hoisted root version, never a nested duplicate under another package', async () => {
+    // The lockfile carries node_modules/vite/node_modules/@types/node at
+    // 18.19.0 and node_modules/vite/node_modules/@scope/pkg at 1.0.0. Only the
+    // hoisted entries are the installed versions for the direct deps.
+    const installed = await nested();
+    expect(installed.get('@types/node')).not.toBe('18.19.0');
+    expect(installed.get('@scope/pkg')).not.toBe('1.0.0');
+  });
+
+  it('never manufactures an entry from a nested key path', async () => {
+    // A name like "vite/node_modules/@types/node" is not a package name — npm
+    // names cannot contain '/' outside a scope prefix. No such key may leak
+    // into the result map.
+    const installed = await nested();
+    for (const name of installed.keys()) {
+      expect(name).not.toContain('node_modules');
+    }
+    expect(installed.has('rollup/node_modules/@types/estree')).toBe(false);
+  });
+
+  it('omits a declared dependency that has no lockfile entry (never-installed)', async () => {
+    const installed = await nested();
+    expect(installed.has('never-installed')).toBe(false);
+  });
+
+  it('omits a lockfile entry that is not a declared direct dependency (rollup)', async () => {
+    const installed = await nested();
+    expect(installed.has('rollup')).toBe(false);
+  });
+
+  it('resolves exactly the declared deps that are present, and nothing else', async () => {
+    const installed = await nested();
+    expect([...installed.keys()].sort()).toEqual(['@scope/pkg', '@types/node', 'vite']);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // loadInstalledVersions — error paths
 // ---------------------------------------------------------------------------
 

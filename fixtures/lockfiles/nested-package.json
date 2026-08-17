@@ -1,0 +1,13 @@
+{
+  "name": "nested-project",
+  "version": "1.0.0",
+  "comment": "Exercises the three lockfile shapes the simple fixtures do not: a scoped package name, a declared dependency with no lockfile entry, and nested node_modules/<parent>/node_modules/<child> keys.",
+  "dependencies": {
+    "@scope/pkg": "^2.1.0",
+    "vite": "^5.0.0",
+    "never-installed": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  }
+}
