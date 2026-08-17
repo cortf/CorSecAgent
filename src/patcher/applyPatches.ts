@@ -131,9 +131,17 @@ export async function applyPatches(
   }
 
   const results: PatchResult[] = [];
-  // Names of packages whose install exited 0; these share the upcoming test
-  // run's outcome.
-  const installedNames = new Set<string>();
+  // Rows whose install exited 0. Their status and testOutput are not knowable
+  // until the shared test run below finishes, so they are held here WITHOUT
+  // those two fields rather than materialised early with a placeholder.
+  //
+  // The previous shape pushed a complete PatchResult asserting
+  // 'patched-tests-passed' — the exact token the CI PR gate counts — for a
+  // suite that had not yet been spawned, then went back and re-found those rows
+  // by a name-keyed linear scan. Correctness rested on statement ordering
+  // rather than on the data model; now `status` is assigned exactly once, at
+  // the point it is actually known.
+  const pendingTests: Array<Omit<PatchResult, 'status' | 'testOutput'>> = [];
 
   for (const { pkg, currentInstalled, decision } of decisions) {
     if (decision === 'no-fix') {
@@ -201,35 +209,33 @@ export async function applyPatches(
       newVersion = null;
     }
 
-    results.push({
+    pendingTests.push({
       packageName: pkg.packageName,
       previousVersion: currentInstalled,
       targetVersion: pkg.targetVersion,
       installedVersion: newVersion,
-      // Placeholder; overwritten once the shared test run completes below.
-      status: 'patched-tests-passed',
       relatedMatches: pkg.ghsaIds,
-      testOutput: null,
       errorMessage: null,
     });
-    installedNames.add(pkg.packageName);
   }
 
-  if (installedNames.size > 0) {
+  if (pendingTests.length > 0) {
     const testResult = await shell(opts.testCommand, opts.workingDir);
     const combined = testResult.stdout + testResult.stderr;
     const truncated = truncateTail(combined, TEST_OUTPUT_MAX_BYTES);
     const testStatus: PatchStatus =
       testResult.exitCode === 0 ? 'patched-tests-passed' : 'patched-tests-failed';
 
-    for (const result of results) {
-      if (installedNames.has(result.packageName)) {
-        result.status = testStatus;
-        result.testOutput = truncated;
-      }
+    for (const pending of pendingTests) {
+      results.push({ ...pending, status: testStatus, testOutput: truncated });
     }
   }
 
+  // Load-bearing, not cosmetic: deferring the installed rows appends them after
+  // the no-fix / already-resolved rows regardless of the order packages were
+  // processed in. Package names are unique post-consolidation, so sorting on
+  // them restores the same deterministic total order the emitted JSON has
+  // always had.
   results.sort((a, b) => a.packageName.localeCompare(b.packageName));
 
   const summary = {

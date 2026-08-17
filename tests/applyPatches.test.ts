@@ -600,6 +600,49 @@ describe('applyPatches — deterministic output', () => {
 });
 
 // -----------------------------------------------------------------------------
+// applyPatches — status / testOutput coupling
+// -----------------------------------------------------------------------------
+
+describe('applyPatches — a tests-* status and a captured test output imply each other', () => {
+  // The invariant the old placeholder shape could violate: between building
+  // the row and the test run finishing, a PatchResult claimed
+  // 'patched-tests-passed' with testOutput: null, for a suite not yet spawned.
+  // Asserting both directions over a session that mixes all the terminal
+  // statuses is what makes that state observable if it ever comes back.
+  it('holds in both directions across a session containing every terminal status', async () => {
+    const ctx = await setupWorkdir(matchesMultiDifferentRaw);
+    try {
+      const session = await applyPatches(
+        {
+          matchesPath: ctx.matchesPath,
+          outputPath: ctx.outputPath,
+          workingDir: ctx.workingDir,
+          testCommand: 'npm test',
+        },
+        {
+          git: makeGit(),
+          // pkg-a installs cleanly, pkg-b fails to install — so the session
+          // carries one tests-* row and one non-tests-* row.
+          npm: makeNpm({ 'pkg-a': '2.5.0', 'pkg-b': 'fail' }),
+          shell: makeShell(0, 'suite output'),
+        },
+      );
+
+      for (const r of session.results) {
+        const ranTests = r.status.startsWith('patched-tests-');
+        expect(ranTests).toBe(r.testOutput !== null);
+      }
+
+      // Guard against the assertion above passing vacuously.
+      expect(session.results.some((r) => r.testOutput !== null)).toBe(true);
+      expect(session.results.some((r) => r.testOutput === null)).toBe(true);
+    } finally {
+      await ctx.cleanup();
+    }
+  });
+});
+
+// -----------------------------------------------------------------------------
 // applyPatches — default executors are not invoked when executors are injected
 // (sanity check — proves no real spawn calls happen in the test suite)
 // -----------------------------------------------------------------------------
