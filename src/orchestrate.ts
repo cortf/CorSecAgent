@@ -21,13 +21,13 @@
 //      stage. The workflow can re-trigger the entire job if a retry is
 //      desired.
 
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { runHunter } from './hunter/run.js';
-import type { Ecosystem } from './hunter/types.js';
+import type { Advisory, Ecosystem } from './hunter/types.js';
 import { runCheckov } from './cort/runCheckov.js';
 import { runTfsec } from './cort/runTfsec.js';
 import { runAwsContextChecks } from './cort/awsContextChecks.js';
@@ -99,6 +99,16 @@ export interface OrchestrateOptions {
   terraformDir?: string;
   dryRun: boolean;
   ecosystem: Ecosystem;
+  // Start of the advisory window. Defaults to 24 h before `now()` — the cron
+  // cadence the workflow runs at. Widen it for backfills and for local testing,
+  // where a 24 h window is usually empty. Note that the underlying GraphQL query
+  // is capped at the 100 most recently published advisories, so widening past
+  // roughly a month returns nothing extra.
+  sinceISO?: string;
+  // Replay a recorded advisory payload instead of querying GitHub. Makes a run
+  // deterministic and removes the GITHUB_TOKEN requirement — used for local
+  // end-to-end testing, never in the workflow.
+  advisoriesPath?: string;
 }
 
 // Wrap a base LLMClient so the orchestrator can capture total input/output
@@ -182,6 +192,43 @@ function synthEmptyPatchSession(branchName: string, errorMessage: string): Patch
   void errorMessage;
 }
 
+// Build a drop-in replacement for `fetchRecentAdvisories` that reads a recorded
+// payload off disk. The file holds the same `Advisory[]` shape the GraphQL query
+// returns, so a recording captured from the live API replays exactly.
+//
+// The ecosystem filter is applied here because the live query filters
+// server-side (`vulnerabilities(ecosystem: $ecosystem)`); without it a mixed
+// recording would surface PIP packages during an NPM run. `sinceISO` is ignored
+// — the recording is already a point-in-time snapshot.
+function fileAdvisoryFetcher(
+  path: string,
+): (sinceISO: string, ecosystem: Ecosystem) => Promise<Advisory[]> {
+  return async (_sinceISO, ecosystem) => {
+    let raw: string;
+    try {
+      raw = await readFile(path, 'utf-8');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`orchestrate: cannot read advisories file ${path}: ${msg}`);
+    }
+    let all: Advisory[];
+    try {
+      all = JSON.parse(raw) as Advisory[];
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`orchestrate: malformed JSON in advisories file ${path}: ${msg}`);
+    }
+    return all.map((advisory) => ({
+      ...advisory,
+      vulnerabilities: {
+        nodes: advisory.vulnerabilities.nodes.filter(
+          (node) => node.package.ecosystem === ecosystem,
+        ),
+      },
+    }));
+  };
+}
+
 function stageLog(name: string, phase: 'started' | 'complete', durationMs?: number): void {
   // Workflow's job summary parses these lines. Format must remain stable.
   if (phase === 'started') {
@@ -241,13 +288,17 @@ export async function orchestrate(
   stageLog('hunter', 'started');
   const hunterStart = now();
   try {
-    const result = await _runHunter({
-      sinceISO: new Date(now() - 24 * 60 * 60 * 1000).toISOString(),
-      ecosystem: opts.ecosystem,
-      packageJsonPath: join(opts.workingDir, 'package.json'),
-      lockfilePath: join(opts.workingDir, 'package-lock.json'),
-      outputPath: hunterPath,
-    });
+    const result = await _runHunter(
+      {
+        sinceISO: opts.sinceISO ?? new Date(now() - 24 * 60 * 60 * 1000).toISOString(),
+        ecosystem: opts.ecosystem,
+        packageJsonPath: join(opts.workingDir, 'package.json'),
+        lockfilePath: join(opts.workingDir, 'package-lock.json'),
+        outputPath: hunterPath,
+      },
+      // undefined falls through to runHunter's default (the live GitHub client).
+      opts.advisoriesPath ? fileAdvisoryFetcher(opts.advisoriesPath) : undefined,
+    );
     matchCount = result.matchCount;
     const duration = now() - hunterStart;
     stageRecords.push({ name: 'hunter', status: 'success', durationMs: duration });
@@ -455,6 +506,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       'terraform-dir': { type: 'string' },
       'dry-run': { type: 'boolean' },
       ecosystem: { type: 'string' },
+      since: { type: 'string' },
+      'advisories-file': { type: 'string' },
     },
     strict: true,
   });
@@ -479,15 +532,24 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const terraformDirRaw = values['terraform-dir'];
   const hasTerraformDir = terraformDirRaw !== undefined && terraformDirRaw.length > 0;
 
+  // Same empty-string guard as --terraform-dir: a workflow expansion that
+  // resolves to "" must read as "not provided", not as an empty path/date.
+  const sinceRaw = values.since;
+  const hasSince = sinceRaw !== undefined && sinceRaw.length > 0;
+  const advisoriesRaw = values['advisories-file'];
+  const hasAdvisories = advisoriesRaw !== undefined && advisoriesRaw.length > 0;
+
   const orchestrateOpts: OrchestrateOptions = {
     workingDir: values['working-dir'] ?? '.',
     outputDir,
     testCommand: values['test-command'] ?? 'npm test',
     dryRun: values['dry-run'] === true,
     ecosystem: ecosystemRaw,
-    // Only set terraformDir when actually provided — exactOptionalPropertyTypes
+    // Only set optional fields when actually provided — exactOptionalPropertyTypes
     // distinguishes "field absent" from "field present and undefined".
     ...(hasTerraformDir ? { terraformDir: terraformDirRaw } : {}),
+    ...(hasSince ? { sinceISO: sinceRaw } : {}),
+    ...(hasAdvisories ? { advisoriesPath: advisoriesRaw } : {}),
   };
 
   orchestrate(orchestrateOpts)

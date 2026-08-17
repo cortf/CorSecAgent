@@ -1,0 +1,472 @@
+[
+  {
+    "ghsaId": "GHSA-76pc-mqxp-3rq5",
+    "summary": "Token Optimizer MCP: Unauthenticated Path Traversal in Dashboard Session Log API Endpoints",
+    "severity": "MODERATE",
+    "cvss": {
+      "score": 5.3
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "@ooples/token-optimizer-mcp",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": "< 5.1.0",
+          "firstPatchedVersion": {
+            "identifier": "5.1.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-49mq-fc6q-3h46",
+    "summary": "Token Optimizer MCP: OS command injection in smart_user via username in get-user-info",
+    "severity": "HIGH",
+    "cvss": {
+      "score": 8.4
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "@ooples/token-optimizer-mcp",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": "< 5.1.0",
+          "firstPatchedVersion": {
+            "identifier": "5.1.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-5fpj-28rv-84r7",
+    "summary": "Budibase: SSRF in Automation Steps - Webhook, Zapier, N8N, Slack, Discord Bypass IP Blacklist",
+    "severity": "HIGH",
+    "cvss": {
+      "score": 0
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "@budibase/server",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": "< 3.41.3",
+          "firstPatchedVersion": {
+            "identifier": "3.41.3"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-p28v-f755-9qrg",
+    "summary": "Trigger.dev: Prototype pollution via run metadata operations → process-wide cross-tenant DoS",
+    "severity": "HIGH",
+    "cvss": {
+      "score": 8.5
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "@trigger.dev/core",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": ">= 3.3.8, <= 4.5.5",
+          "firstPatchedVersion": {
+            "identifier": "4.5.6"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-5pq8-3ffp-7w5m",
+    "summary": "hashi-vault-js: Vault token and secret values exposed in thrown errors",
+    "severity": "MODERATE",
+    "cvss": {
+      "score": 0
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "hashi-vault-js",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": "<= 0.5.1",
+          "firstPatchedVersion": {
+            "identifier": "0.5.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-vqfp-p66c-xrp9",
+    "summary": "ep_etherpad-lite: Device-to-device author-token transfer endpoint is replayable, never expires, and exposes the cleartext author token",
+    "severity": "MODERATE",
+    "cvss": {
+      "score": 6.8
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "ep_etherpad-lite",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": ">= 2.6.0, <= 3.0.0",
+          "firstPatchedVersion": {
+            "identifier": "3.1.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-2jwf-f4xq-f24h",
+    "summary": "ep_etherpad-lite: Import/export uses Math.random() for temp file paths; predictable paths on shared /tmp enable symlink-based file overwrite",
+    "severity": "MODERATE",
+    "cvss": {
+      "score": 4.2
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "ep_etherpad-lite",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": "<= 3.0.0",
+          "firstPatchedVersion": {
+            "identifier": "3.1.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-fjgc-3mj7-8rg8",
+    "summary": "ep_etherpad-lite: Cache-poisoning Cross-site Scripting and Open Redirect via x-proxy-path Header",
+    "severity": "MODERATE",
+    "cvss": {
+      "score": 6.1
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "ep_etherpad-lite",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": ">= 2.1.0, <= 3.0.0",
+          "firstPatchedVersion": {
+            "identifier": "3.1.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-4jjw-pwvw-q6w3",
+    "summary": "Duplicate Advisory: Nuxt dev server discloses project root and workspace UUID via the Chrome DevTools workspace endpoint",
+    "severity": "MODERATE",
+    "cvss": {
+      "score": 6.2
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "nuxt",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": ">= 4.4.7, < 4.5.1",
+          "firstPatchedVersion": null
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-rg76-677x-56q9",
+    "summary": "crypto-js: Insufficient Entropy in Cryptographic Secret Generation via Vulnerable CryptoJS Dependency Chain",
+    "severity": "CRITICAL",
+    "cvss": {
+      "score": 9
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "crypto-js",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": "< 4.0.0",
+          "firstPatchedVersion": {
+            "identifier": "4.0.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-f23p-vx2j-j53r",
+    "summary": "Hono: `memo()` retains SSR output across requests, leading to cross-user data disclosure",
+    "severity": "MODERATE",
+    "cvss": {
+      "score": 4.8
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "hono",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": ">= 3.8.0, < 4.12.34",
+          "firstPatchedVersion": {
+            "identifier": "4.12.34"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-79qm-7rj5-m7r9",
+    "summary": "Hono: Proxy Helper does not remove response headers listed in the `Connection` header",
+    "severity": "LOW",
+    "cvss": {
+      "score": 3.7
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "hono",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": ">= 4.7.0, < 4.12.34",
+          "firstPatchedVersion": {
+            "identifier": "4.12.34"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-54fx-42gc-7vw4",
+    "summary": "Hono: Algorithmic Complexity DoS in Language Middleware",
+    "severity": "MODERATE",
+    "cvss": {
+      "score": 5.3
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "hono",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": ">= 4.12.0, < 4.12.34",
+          "firstPatchedVersion": {
+            "identifier": "4.12.34"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-wcx4-wpfv-mc5c",
+    "summary": "jsii-diff: Command Injection via npm: package argument",
+    "severity": "HIGH",
+    "cvss": {
+      "score": 7.8
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "jsii-diff",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": "< 1.131.0",
+          "firstPatchedVersion": {
+            "identifier": "1.131.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-29g2-3rmr-qm68",
+    "summary": "SvelteKit: ReDoS (O(n^2)) in content negotiation — unauthenticated DoS via the Accept header",
+    "severity": "MODERATE",
+    "cvss": {
+      "score": 5.3
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "@sveltejs/kit",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": "<= 2.70.1",
+          "firstPatchedVersion": {
+            "identifier": "2.70.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-7c4v-fwgw-9rf7",
+    "summary": "Nuxt dev server discloses project root and workspace UUID via the Chrome DevTools workspace endpoint",
+    "severity": "MODERATE",
+    "cvss": {
+      "score": 0
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "nuxt",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": ">= 3.21.7, < 3.21.10",
+          "firstPatchedVersion": {
+            "identifier": "3.21.10"
+          }
+        },
+        {
+          "package": {
+            "name": "nuxt",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": ">= 4.4.7, < 4.5.1",
+          "firstPatchedVersion": {
+            "identifier": "4.5.1"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-55q2-fjhq-7xh7",
+    "summary": "DOMPurify: IN_PLACE hook removal leaves a detached subtree executable, causing XSS",
+    "severity": "MODERATE",
+    "cvss": {
+      "score": 0
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "dompurify",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": "<= 3.4.12",
+          "firstPatchedVersion": {
+            "identifier": "3.4.13"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-j4r3-hg7j-8chg",
+    "summary": "node-re2: Out-of-bounds heap read in `replace`/`split` via a `Buffer` ending in a truncated multi-byte UTF-8 character → adjacent heap memory disclosed to JavaScript",
+    "severity": "MODERATE",
+    "cvss": {
+      "score": 5.1
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "re2",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": "<= 1.26.0",
+          "firstPatchedVersion": {
+            "identifier": "1.26.1"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-8hcv-x26h-mcgp",
+    "summary": "node-re2: String.prototype.replace(re2, template) aborts the Node process (uncatchable ToLocalChecked on empty MaybeLocal) when the result exceeds V8's max string length",
+    "severity": "MODERATE",
+    "cvss": {
+      "score": 6.2
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "re2",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": "<= 1.25.0",
+          "firstPatchedVersion": {
+            "identifier": "1.25.1"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-w9hm-4m3m-fxmm",
+    "summary": "ngx-extended-pdf-viewer bundles a version of pdf.js vulnerable to CVE-2026-16633",
+    "severity": "HIGH",
+    "cvss": {
+      "score": 0
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "ngx-extended-pdf-viewer",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": ">= 27.0.0-rc.0, < 29.0.0-rc.3",
+          "firstPatchedVersion": {
+            "identifier": "29.0.0-rc.3"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "ghsaId": "GHSA-hq66-cqwq-w95j",
+    "summary": "PDF.js: Arbitrary JavaScript execution upon opening a malicious PDF ",
+    "severity": "HIGH",
+    "cvss": {
+      "score": 0
+    },
+    "vulnerabilities": {
+      "nodes": [
+        {
+          "package": {
+            "name": "pdfjs-dist",
+            "ecosystem": "NPM"
+          },
+          "vulnerableVersionRange": ">= 5.6.83, < 6.2.108",
+          "firstPatchedVersion": {
+            "identifier": "6.2.108"
+          }
+        }
+      ]
+    }
+  }
+]

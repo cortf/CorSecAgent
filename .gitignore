@@ -7,3 +7,10 @@ dist/
 !.env.example
 hunter-matches/
 *.json.artifact
+
+# Local end-to-end testing (scripts/run-local.sh)
+sandbox/
+.corsec-local/
+
+# Local working notes
+audit.md
