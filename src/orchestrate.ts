@@ -166,8 +166,15 @@ function synthEmptyPatchSession(branchName: string): PatchSession {
   };
 }
 
+// Human-readable progress markers for the CI log. Nothing parses these.
+//
+// This used to claim "Workflow's job summary parses these lines. Format must
+// remain stable." It does not: grep over .github/workflows/ finds zero
+// references to `stage:`, and the job summary reads orchestration-summary.json
+// with jq without ever touching stdout. The comment imposed a format-stability
+// constraint that did not exist. The machine-readable contract is the summary
+// artifact; that is the thing to keep stable.
 function stageLog(name: string, phase: 'started' | 'complete', durationMs?: number): void {
-  // Workflow's job summary parses these lines. Format must remain stable.
   if (phase === 'started') {
     // eslint-disable-next-line no-console
     console.log(`[stage:${name}] started`);

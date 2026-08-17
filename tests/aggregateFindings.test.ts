@@ -340,6 +340,27 @@ describe('aggregateFindings — uncategorized never deduplicates', () => {
     const report = aggregateFindings(checkov, tfsec, emptyAwsContext());
     expect(report.findings).toHaveLength(2);
   });
+
+  it('an uncategorized finding does not join a categorized group on the same resource', () => {
+    // The mixed case: one known check ID and one unknown, both naming
+    // aws_s3_bucket.x. The categorized row owns the (category, resource) key;
+    // the uncategorized row must stay a separate finding rather than being
+    // folded into it as a second source.
+    const checkov: CheckovReport = {
+      ...emptyCheckovReport(),
+      failed: [
+        checkovFinding({ checkId: 'CKV_AWS_19', resource: 'aws_s3_bucket.x' }),
+        checkovFinding({ checkId: 'CKV_AWS_99991', resource: 'aws_s3_bucket.x' }),
+      ],
+    };
+
+    const report = aggregateFindings(checkov, emptyTfsecReport(), emptyAwsContext());
+
+    expect(report.findings).toHaveLength(2);
+    expect(report.findings.every((f) => f.sources.length === 1)).toBe(true);
+    const categories = report.findings.map((f) => f.category).sort();
+    expect(categories).toEqual(['encryption-at-rest', 'uncategorized']);
+  });
 });
 
 describe('aggregateFindings — AWS context passthrough', () => {

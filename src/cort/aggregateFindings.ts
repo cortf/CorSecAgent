@@ -212,25 +212,41 @@ export function aggregateFindings(
     ...tfsec.failed.map(fromTfsec),
   ];
 
-  // Group by (category, resource) tuple. Uncategorized findings get a unique
-  // synthetic key per-entry so they never collide with each other — this is
-  // how "uncategorized never deduplicates" is implemented.
-  const groups = new Map<string, NormalizedFinding[]>();
-  for (const [i, n] of normalized.entries()) {
-    const key =
-      n.category === 'uncategorized'
-        ? `uncategorized::${i}::${n.scanner}::${n.ruleId}`
-        : `${n.category}::${n.resource}`;
-    const existing = groups.get(key);
+  // Uncategorized findings never enter the dedup index at all — they go
+  // straight into `groups` as singletons. Categorized findings additionally get
+  // a (category, resource) entry in `byKey` so later findings can join them.
+  //
+  // This replaces a synthetic key of the form
+  // `uncategorized::${i}::${scanner}::${ruleId}`, in which the entry index
+  // alone already guaranteed uniqueness — so scanner and ruleId carried zero
+  // uniqueness weight and were purely decorative. Worse, the key *read* as
+  // "uncategorized dedupes on (scanner, ruleId)", the exact opposite of the
+  // rule in force, so a maintainer tidying away the index-looking noise would
+  // have silently collapsed findings on different resources.
+  //
+  // `groups` and `byKey` deliberately alias the same array objects: pushing
+  // through a byKey lookup mutates the array already sitting in `groups`, which
+  // is what preserves first-seen ordering.
+  const groups: NormalizedFinding[][] = [];
+  const byKey = new Map<string, NormalizedFinding[]>();
+  for (const n of normalized) {
+    if (n.category === 'uncategorized') {
+      groups.push([n]);
+      continue;
+    }
+    const key = `${n.category}::${n.resource}`;
+    const existing = byKey.get(key);
     if (existing) {
       existing.push(n);
     } else {
-      groups.set(key, [n]);
+      const group = [n];
+      groups.push(group);
+      byKey.set(key, group);
     }
   }
 
   const findings: AggregatedFinding[] = [];
-  for (const group of groups.values()) {
+  for (const group of groups) {
     const representative = pickRepresentative(group);
     // group is non-empty: every entry in `groups` was created with a single
     // initial NormalizedFinding (the `groups.set(key, [n])` branch above).
