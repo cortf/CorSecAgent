@@ -14,3 +14,7 @@ sandbox/
 
 # Local working notes
 audit.md
+
+# Incidental tooling residue — never belongs in the repo
+.webui_secret_key
+.DS_Store
