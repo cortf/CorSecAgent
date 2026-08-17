@@ -80,7 +80,15 @@ export interface OrchestrationSummary {
   matchCount: number;
   branchName: string | null;
   llmTokens: { input: number; output: number };
-  dryRun: boolean;
+  // Records what the operator ASKED for; it does not enforce anything.
+  //
+  // Named for that role deliberately. `dryRun` read as the safety control that
+  // prevents pushes, and it is not: --dry-run is never branched on anywhere in
+  // src/, no stage receives it, and applyPatches has no dry-run parameter and
+  // never pushes by design. The actual gate lives in the workflow, which reads
+  // its own resolved input rather than this field. Keeping the flag (README and
+  // scripts/run-local.sh both pass it) but naming it honestly.
+  dryRunRequested: boolean;
   outputDir: string;
   finalExitCode: number;
 }
@@ -275,7 +283,7 @@ export async function orchestrate(
       matchCount,
       branchName,
       llmTokens: tokens,
-      dryRun: opts.dryRun,
+      dryRunRequested: opts.dryRun,
       outputDir: opts.outputDir,
       finalExitCode,
     };

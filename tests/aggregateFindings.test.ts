@@ -9,13 +9,12 @@ import {
 } from '../src/cort/aggregateFindings.js';
 import { runCheckov, type CheckovExecutor } from '../src/cort/runCheckov.js';
 import { runTfsec, type TfsecExecutor } from '../src/cort/runTfsec.js';
-import type {
-  AwsContextReport,
-  CheckovFinding,
-  CheckovReport,
-  TfsecFinding,
-  TfsecReport,
-} from '../src/cort/types.js';
+import type { CheckovFinding, TfsecFinding } from '../src/cort/types.js';
+import {
+  emptyAwsContextReport,
+  emptyCheckovReport,
+  emptyTfsecReport,
+} from './helpers/emptyReports.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixture loading. We reuse the shared findings fixtures used by Slice 6 and
@@ -44,21 +43,11 @@ function makeTfsecExecutor(stdout: string): TfsecExecutor {
   return vi.fn().mockResolvedValue({ stdout, stderr: '', exitCode: 0 });
 }
 
-// Small constructors so each test reads as data, not boilerplate.
-function emptyCheckovReport(): CheckovReport {
-  return { passed: [], failed: [], skipped: [] };
-}
-
-function emptyTfsecReport(): TfsecReport {
-  return { passed: [], failed: [] };
-}
-
-function emptyAwsContext(): AwsContextReport {
-  return {
-    alb: { albCount: 0, albArns: [] },
-    imdsv2: { checked: [], compliantCount: 0, nonCompliantCount: 0 },
-  };
-}
+// Aliased to the suite-wide name. The local copy this replaced still carried
+// albCount / compliantCount / nonCompliantCount long after those fields were
+// removed — it typechecked only because tsconfig excludes tests/, which is the
+// rot a shared builder prevents.
+const emptyAwsContext = emptyAwsContextReport;
 
 function checkovFinding(over: Partial<CheckovFinding> = {}): CheckovFinding {
   return {

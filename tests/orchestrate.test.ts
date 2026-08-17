@@ -7,12 +7,12 @@ import { fileURLToPath } from 'node:url';
 
 import { orchestrate, type OrchestrateOptions, type OrchestrationSummary } from '../src/orchestrate.js';
 import type { Ecosystem, MatchedThreat } from '../src/hunter/types.js';
-import type {
-  AwsContextReport,
-  CheckovReport,
-  TfsecReport,
-} from '../src/cort/types.js';
 import { aggregateFindings } from '../src/cort/aggregateFindings.js';
+import {
+  emptyAwsContextReport,
+  emptyCheckovReport,
+  emptyTfsecReport,
+} from './helpers/emptyReports.js';
 import type { PatchSession } from '../src/patcher/types.js';
 import type { LLMClient } from '../src/shared/llmClient.js';
 
@@ -39,21 +39,6 @@ function baseOpts(outputDir: string, overrides: Partial<OrchestrateOptions> = {}
     ecosystem: 'NPM' as Ecosystem,
     dryRun: true,
     ...overrides,
-  };
-}
-
-function emptyCheckovReport(): CheckovReport {
-  return { passed: [], failed: [], skipped: [] };
-}
-
-function emptyTfsecReport(): TfsecReport {
-  return { passed: [], failed: [] };
-}
-
-function emptyAwsContextReport(): AwsContextReport {
-  return {
-    alb: { albArns: [] },
-    imdsv2: { checked: [] },
   };
 }
 
@@ -603,7 +588,7 @@ describe('orchestrate — stage timing captured in summary', () => {
 });
 
 describe('orchestrate — summary file shape', () => {
-  it('persists branchName, dryRun flag, and llmTokens', async () => {
+  it('persists branchName, the requested dry-run flag, and llmTokens', async () => {
     const { dir, cleanup } = await makeTmpDir();
     try {
       const fakeLLM = makeFakeLLMClient();
@@ -637,7 +622,7 @@ describe('orchestrate — summary file shape', () => {
       );
 
       expect(summary.branchName).toBe('corsec/hotfix/1700000000');
-      expect(summary.dryRun).toBe(false);
+      expect(summary.dryRunRequested).toBe(false);
       // fake LLM returns 100/50 per call
       expect(summary.llmTokens).toEqual({ input: 100, output: 50 });
     } finally {
