@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { MatchedThreat } from '../hunter/types.js';
 import { loadInstalledVersions } from '../hunter/matchDependencies.js';
-import { isVersionInRange } from '../shared/semverRange.js';
+import { isAtLeast, isComparableVersion } from '../shared/semverRange.js';
 import { spawnCapture } from '../shared/spawnCapture.js';
 import type { PatchResult, PatchSession, PatchStatus } from './types.js';
 
@@ -108,7 +108,7 @@ export async function applyPatches(
     let decision: 'no-fix' | 'already-resolved' | 'attempt';
     if (pkg.targetVersion === null) {
       decision = 'no-fix';
-    } else if (isVersionInRange(currentInstalled, `>= ${pkg.targetVersion}`)) {
+    } else if (isAtLeast(currentInstalled, pkg.targetVersion)) {
       decision = 'already-resolved';
     } else {
       decision = 'attempt';
@@ -321,12 +321,23 @@ function consolidateByPackage(matches: MatchedThreat[]): ConsolidatedPatch[] {
 }
 
 // Routes through shared/semverRange (CLAUDE.md hard rule: no direct semver
-// calls in feature code). `isVersionInRange(a, '>= b')` is true iff a >= b.
+// calls in feature code).
+//
+// These are two versions being compared, so they go through isAtLeast rather
+// than through a ">= x" range built by concatenation. The values are
+// firstPatchedVersion identifiers straight off the GitHub Advisory API and are
+// not validated semver — under the old idiom one unparseable identifier threw
+// out of here, out of consolidateByPackage, out of applyPatches, and cost every
+// other package in the session its patch.
 function pickHighest(versions: string[]): string {
   let highest = versions[0]!;
   for (let i = 1; i < versions.length; i++) {
     const candidate = versions[i]!;
-    if (!isVersionInRange(highest, `>= ${candidate}`)) {
+    // isAtLeast is false both for "candidate is lower" and for "candidate is
+    // not comparable", so an unparseable candidate cannot displace a usable
+    // incumbent. The first clause covers the reverse case: an unparseable
+    // incumbent would otherwise pin the result for the whole loop.
+    if (!isComparableVersion(highest) || isAtLeast(candidate, highest)) {
       highest = candidate;
     }
   }

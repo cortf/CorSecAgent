@@ -46,6 +46,10 @@ const matchesMultiDifferentRaw = readFileSync(
   new URL('../fixtures/patcher/matches-multi-different-packages.json', import.meta.url),
   'utf-8',
 );
+const matchesNonSemverPatchRaw = readFileSync(
+  new URL('../fixtures/patcher/matches-non-semver-patch.json', import.meta.url),
+  'utf-8',
+);
 
 // Set up a fresh temp working directory with the canonical package.json +
 // lockfile-before in place, and a matches.json file containing the supplied
@@ -630,6 +634,70 @@ describe('applyPatches — deterministic output', () => {
     } finally {
       await ctx1.cleanup();
       await ctx2.cleanup();
+    }
+  });
+});
+
+// -----------------------------------------------------------------------------
+// applyPatches — a non-semver firstPatchedVersion must not sink the session
+// -----------------------------------------------------------------------------
+
+describe('applyPatches — advisory carries a non-semver firstPatchedVersion', () => {
+  // The blast radius before isAtLeast: consolidateByPackage built a range by
+  // concatenation ('>= 3.25.0.RELEASE'), isVersionInRange threw on the invalid
+  // range, the throw escaped applyPatches entirely, and the orchestrator
+  // replaced the whole stage with a synthetic empty session — so every other
+  // package lost its patch over one bad identifier from the advisory feed.
+  it('does not throw, and still patches the unrelated package in the same session', async () => {
+    const ctx = await setupWorkdir(matchesNonSemverPatchRaw);
+    try {
+      const session = await applyPatches(
+        {
+          matchesPath: ctx.matchesPath,
+          outputPath: ctx.outputPath,
+          workingDir: ctx.workingDir,
+          testCommand: 'npm test',
+        },
+        {
+          git: makeGit(),
+          npm: makeNpm({ wrangler: '3.25.0', 'pkg-b': '3.5.0' }),
+          shell: makeShell(0),
+        },
+      );
+
+      const pkgB = session.results.find((r) => r.packageName === 'pkg-b');
+      expect(pkgB?.status).toBe('patched-tests-passed');
+      expect(session.results).toHaveLength(2);
+    } finally {
+      await ctx.cleanup();
+    }
+  });
+
+  it('keeps the comparable candidate rather than letting the unparseable one win', async () => {
+    const ctx = await setupWorkdir(matchesNonSemverPatchRaw);
+    try {
+      const session = await applyPatches(
+        {
+          matchesPath: ctx.matchesPath,
+          outputPath: ctx.outputPath,
+          workingDir: ctx.workingDir,
+          testCommand: 'npm test',
+        },
+        {
+          git: makeGit(),
+          npm: makeNpm({ wrangler: '3.25.0', 'pkg-b': '3.5.0' }),
+          shell: makeShell(0),
+        },
+      );
+
+      const wrangler = session.results.find((r) => r.packageName === 'wrangler');
+      expect(wrangler?.targetVersion).toBe('3.20.0');
+      expect(wrangler?.relatedMatches).toEqual([
+        'GHSA-cfph-4qqh-w828',
+        'GHSA-f8mp-x433-5wpf',
+      ]);
+    } finally {
+      await ctx.cleanup();
     }
   });
 });

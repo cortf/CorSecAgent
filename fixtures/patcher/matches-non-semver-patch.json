@@ -1,0 +1,32 @@
+[
+  {
+    "ghsaId": "GHSA-cfph-4qqh-w828",
+    "packageName": "wrangler",
+    "installedVersion": "3.10.0",
+    "vulnerableRange": ">= 3.0.0, < 3.20.0",
+    "patchedVersion": "3.20.0",
+    "severity": "HIGH",
+    "cvssScore": null,
+    "summary": "wrangler advisory one — ordinary semver firstPatchedVersion"
+  },
+  {
+    "ghsaId": "GHSA-f8mp-x433-5wpf",
+    "packageName": "wrangler",
+    "installedVersion": "3.10.0",
+    "vulnerableRange": ">= 3.0.0",
+    "patchedVersion": "3.25.0.RELEASE",
+    "severity": "MODERATE",
+    "cvssScore": null,
+    "summary": "wrangler advisory two — Maven-style firstPatchedVersion identifier, which is not valid semver. The GitHub Advisory API returns this identifier verbatim and MAVEN is an accepted --ecosystem, so it must not throw out of the patch stage."
+  },
+  {
+    "ghsaId": "GHSA-aaaa-bbbb-cccc",
+    "packageName": "pkg-b",
+    "installedVersion": "3.0.0",
+    "vulnerableRange": "< 3.5.0",
+    "patchedVersion": "3.5.0",
+    "severity": "HIGH",
+    "cvssScore": null,
+    "summary": "an unrelated package that must still get its patch"
+  }
+]

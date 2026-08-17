@@ -14,7 +14,7 @@ import {
   type DescribeServicesCommandOutput,
   type Service,
 } from '@aws-sdk/client-ecs';
-import { isVersionInRange } from '../shared/semverRange.js';
+import { isAtLeast } from '../shared/semverRange.js';
 import type {
   AlbContextFinding,
   AwsContextReport,
@@ -254,7 +254,7 @@ export async function runAwsContextChecks(
 //   'LATEST'                → 'LATEST', compliant — always the current
 //                              platform; Fargate has shipped IMDSv2-by-default
 //                              since 1.4.0 (April 2020)
-//   '1.4.0' or any version  → compliant iff the version satisfies '>= 1.4.0'
+//   '1.4.0' or any version  → compliant iff the version is at least 1.4.0,
 //                              per the shared semverRange helper (no direct
 //                              `semver` calls per CLAUDE.md hard rules)
 //   Invalid semver string   → reported verbatim as the platformVersion, but
@@ -266,13 +266,8 @@ export function classifyPlatformVersion(
   if (!raw || raw === 'LATEST') {
     return { platformVersion: 'LATEST', compliant: true };
   }
-  try {
-    const compliant = isVersionInRange(raw, '>= 1.4.0');
-    return { platformVersion: raw, compliant };
-  } catch {
-    // The range '>= 1.4.0' is valid, so a throw here means the version itself
-    // was rejected upstream by validRange-vs-version checks. Treat as non-
-    // compliant rather than crashing the whole check on one malformed row.
-    return { platformVersion: raw, compliant: false };
-  }
+  // isAtLeast returns false for an unparseable version rather than throwing, so
+  // the defensive try/catch this used to need is gone. A malformed
+  // platformVersion is reported non-compliant, which is what the catch did.
+  return { platformVersion: raw, compliant: isAtLeast(raw, '1.4.0') };
 }

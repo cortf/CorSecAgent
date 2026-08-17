@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { isVersionInRange, normalizeRange } from '../src/shared/semverRange.js';
+import {
+  isAtLeast,
+  isComparableVersion,
+  isVersionInRange,
+  normalizeRange,
+} from '../src/shared/semverRange.js';
 
 describe('normalizeRange', () => {
   it('passes through a simple range unchanged', () => {
@@ -161,5 +166,93 @@ describe('GitHub Advisory fixture — electerm (>= 3.0.6, <= 3.8.8, patched at 3
 
   it('does not match a version well above the upper bound', () => {
     expect(isVersionInRange('4.0.0', range)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isAtLeast — the two-version comparison that replaces a constructed range
+// ---------------------------------------------------------------------------
+
+describe('isAtLeast — simple cases', () => {
+  it('is true for a version above the minimum', () => {
+    expect(isAtLeast('4.17.21', '4.17.0')).toBe(true);
+  });
+
+  it('is true for a version equal to the minimum (inclusive)', () => {
+    expect(isAtLeast('1.4.0', '1.4.0')).toBe(true);
+  });
+
+  it('is false for a version below the minimum', () => {
+    expect(isAtLeast('1.3.0', '1.4.0')).toBe(false);
+  });
+
+  it('compares numerically, not lexically (10 is above 9)', () => {
+    expect(isAtLeast('1.10.0', '1.9.0')).toBe(true);
+  });
+});
+
+describe('isAtLeast — pre-release handling matches isVersionInRange', () => {
+  it('is false for a pre-release of a later major (semver default, unlike semver.gte)', () => {
+    // gte('2.0.0-alpha', '1.0.0') would be true. Going through satisfies keeps
+    // this consistent with how every vulnerable-range check in the pipeline
+    // treats pre-releases.
+    expect(isAtLeast('2.0.0-alpha', '1.0.0')).toBe(false);
+  });
+
+  it('is false for a pre-release of the minimum itself', () => {
+    expect(isAtLeast('1.4.0-rc.1', '1.4.0')).toBe(false);
+  });
+});
+
+describe('isAtLeast — invalid input (should return false, not throw)', () => {
+  // The whole reason this function exists. `isVersionInRange(v, '>= ' + m)`
+  // threw whenever m was not valid semver, because m landed in the range
+  // position where the contract is throw-on-invalid.
+  it('returns false for a Maven-style identifier as the minimum', () => {
+    expect(() => isAtLeast('1.0.0', '1.2.3.RELEASE')).not.toThrow();
+    expect(isAtLeast('1.0.0', '1.2.3.RELEASE')).toBe(false);
+  });
+
+  it('returns false for the literal string "latest" as the minimum', () => {
+    expect(isAtLeast('1.0.0', 'latest')).toBe(false);
+  });
+
+  it('returns false for an empty minimum', () => {
+    expect(isAtLeast('1.0.0', '')).toBe(false);
+  });
+
+  it('returns false for a non-semver version (git SHA / file: ref in a lockfile)', () => {
+    expect(isAtLeast('file:../local-pkg', '1.0.0')).toBe(false);
+  });
+
+  it('returns false when both sides are unparseable', () => {
+    expect(isAtLeast('not-a-version', 'also-not-a-version')).toBe(false);
+  });
+
+  it('does not throw for any combination of unparseable arguments', () => {
+    const junk = ['1.2.3.RELEASE', 'latest', '', 'v-nope', 'file:../x'];
+    for (const a of junk) {
+      for (const b of junk) {
+        expect(() => isAtLeast(a, b)).not.toThrow();
+      }
+    }
+  });
+});
+
+describe('isComparableVersion', () => {
+  it('is true for a valid semver string', () => {
+    expect(isComparableVersion('1.4.0')).toBe(true);
+  });
+
+  it('is true for a valid pre-release', () => {
+    expect(isComparableVersion('1.4.0-rc.1')).toBe(true);
+  });
+
+  it('is false for a Maven-style identifier', () => {
+    expect(isComparableVersion('1.2.3.RELEASE')).toBe(false);
+  });
+
+  it('is false for an empty string', () => {
+    expect(isComparableVersion('')).toBe(false);
   });
 });
