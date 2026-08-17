@@ -334,6 +334,113 @@ describe('validateSections', () => {
 // composePR — template-only path
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// renderTemplate — exported for tests but, until now, never actually called by
+// one. Both template-mode tests went through composePR with a one-result
+// fixture, so neither the empty-session document nor the pluralisation
+// branches had any coverage.
+// -----------------------------------------------------------------------------
+
+describe('renderTemplate — empty session', () => {
+  function emptySession() {
+    return {
+      branchName: 'corsec/hotfix/1',
+      results: [],
+      testRun: null,
+      summary: {
+        total: 0,
+        byStatus: {
+          'patched-tests-passed': 0,
+          'patched-tests-failed': 0,
+          'patch-failed-install-error': 0,
+          'patch-failed-no-fix-available': 0,
+          'skipped-already-resolved': 0,
+        },
+      },
+    } as const;
+  }
+
+  // Byte-for-byte, because a dropped blank line between a header and its
+  // bullets breaks markdown list rendering in a real PR body, and the document
+  // deliberately has no trailing newline.
+  const EXPECTED =
+    '## Risk Summary\nNone.\n\n' +
+    '## Affected Dependencies\nNone.\n\n' +
+    '## Patches Applied\nNone.\n\n' +
+    '## Infrastructure Hardening\nNone.\n\n' +
+    '## Test Results\nNo tests run (no patches applied).';
+
+  it('renders the exact five-section empty document', () => {
+    expect(__testing.renderTemplate(emptySession())).toBe(EXPECTED);
+  });
+
+  it('produces a document the section validator accepts', () => {
+    expect(() =>
+      __testing.validateSections(__testing.renderTemplate(emptySession())),
+    ).not.toThrow();
+  });
+});
+
+describe('renderTemplate — pluralisation', () => {
+  function result(packageName: string, ghsas: string[]) {
+    return {
+      packageName,
+      previousVersion: '1.0.0',
+      targetVersion: '2.0.0',
+      installedVersion: '2.0.1',
+      status: 'patched-tests-passed',
+      relatedMatches: ghsas,
+      errorMessage: null,
+    } as const;
+  }
+
+  function sessionWith(results: ReturnType<typeof result>[]) {
+    return {
+      branchName: 'corsec/hotfix/1',
+      results,
+      testRun: { status: 'passed', output: 'ok' },
+      summary: {
+        total: results.length,
+        byStatus: {
+          'patched-tests-passed': results.length,
+          'patched-tests-failed': 0,
+          'patch-failed-install-error': 0,
+          'patch-failed-no-fix-available': 0,
+          'skipped-already-resolved': 0,
+        },
+      },
+    } as const;
+  }
+
+  it('uses the singular for one patch across one package', () => {
+    const md = __testing.renderTemplate(sessionWith([result('a', ['GHSA-1'])]));
+    expect(md).toContain('Applied 1 security patch across 1 package.');
+  });
+
+  it('uses the plural for several patches across several packages', () => {
+    const md = __testing.renderTemplate(
+      sessionWith([result('a', ['GHSA-1', 'GHSA-2']), result('b', ['GHSA-3'])]),
+    );
+    expect(md).toContain('Applied 3 security patches across 2 packages.');
+  });
+
+  it('lists every package under both Affected Dependencies and Patches Applied', () => {
+    const md = __testing.renderTemplate(
+      sessionWith([result('a', ['GHSA-1']), result('b', ['GHSA-2'])]),
+    );
+    expect(md).toContain('- a: GHSA-1');
+    expect(md).toContain('- b: GHSA-2');
+    expect(md).toContain('- a: 1.0.0 → 2.0.1 (patched-tests-passed)');
+    expect(md).toContain('- b: 1.0.0 → 2.0.1 (patched-tests-passed)');
+  });
+
+  it('falls back to the previous version when installedVersion is null', () => {
+    const rows = [{ ...result('a', ['GHSA-1']), installedVersion: null }] as const;
+    const md = __testing.renderTemplate(sessionWith([...rows]));
+    expect(md).toContain('- a: 1.0.0 → 1.0.0 (patched-tests-passed)');
+  });
+});
+
 describe('composePR — template-only mode', () => {
   it('uses template mode for the clean fixture and never calls the LLM', async () => {
     const { outputPath, cleanup } = await makeTmpOutput();

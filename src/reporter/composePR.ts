@@ -261,49 +261,75 @@ async function composeViaLLM(
   return result.text;
 }
 
+// The document rendered when a template-mode session has no results at all.
+//
+// Reached only via the vacuous case: decideMode returns 'template' when EVERY
+// result is 'patched-tests-passed', which an empty array satisfies trivially —
+// and an empty session is exactly what orchestrate.ts manufactures when the
+// Patcher throws. Held as a constant so the condition is evaluated once, at the
+// top, instead of being re-tested inside each of the five sections.
+//
+// No trailing newline, and a blank line between every header and its body: the
+// exact bytes matter because a dropped blank line breaks markdown list
+// rendering in a PR body.
+const EMPTY_SESSION_TEMPLATE = [
+  '## Risk Summary',
+  'None.',
+  '',
+  '## Affected Dependencies',
+  'None.',
+  '',
+  '## Patches Applied',
+  'None.',
+  '',
+  '## Infrastructure Hardening',
+  'None.',
+  '',
+  '## Test Results',
+  'No tests run (no patches applied).',
+].join('\n');
+
 // Deterministic markdown for the trivial case: every patch landed, every
 // test passed, no Cort findings to narrate. The five required headers
 // always appear in order so the validator passes uniformly.
+//
+// Renders `session.results` directly. It used to filter to
+// status === 'patched-tests-passed' first, but decideMode returns 'template'
+// only when every result already has that status — so the filter was always
+// identical in content to session.results and could never remove an element.
+// That no-op was then branched on four times, each testing the same condition,
+// which reduces to `results.length === 0`.
+//
+// The filter also read as defensive while being a data-loss channel: widen
+// decideMode to admit another status (skipped-already-resolved, say, as a
+// plausible cost optimisation) and it would silently drop those rows —
+// undercounting GHSAs in the Risk Summary and omitting advisories from Affected
+// Dependencies, in a security document, with no test failing.
 function renderTemplate(session: PatchSession): string {
-  const applied = session.results.filter(
-    (r) => r.status === 'patched-tests-passed',
-  );
+  const applied = session.results;
+  if (applied.length === 0) return EMPTY_SESSION_TEMPLATE;
+
+  const packages = applied.length;
+  const ghsas = applied.reduce((sum, r) => sum + r.relatedMatches.length, 0);
 
   const lines: string[] = [];
 
   lines.push('## Risk Summary');
-  if (applied.length === 0) {
-    lines.push('None.');
-  } else {
-    const packages = applied.length;
-    const ghsas = applied.reduce((sum, r) => sum + r.relatedMatches.length, 0);
-    lines.push(
-      `Applied ${ghsas} security patch${ghsas === 1 ? '' : 'es'} across ${packages} package${packages === 1 ? '' : 's'}. All tests passing.`,
-    );
-  }
+  lines.push(
+    `Applied ${ghsas} security patch${ghsas === 1 ? '' : 'es'} across ${packages} package${packages === 1 ? '' : 's'}. All tests passing.`,
+  );
   lines.push('');
 
   lines.push('## Affected Dependencies');
-  if (applied.length === 0) {
-    lines.push('None.');
-  } else {
-    for (const r of applied) {
-      const ghsas = r.relatedMatches.join(', ');
-      lines.push(`- ${r.packageName}: ${ghsas}`);
-    }
+  for (const r of applied) {
+    lines.push(`- ${r.packageName}: ${r.relatedMatches.join(', ')}`);
   }
   lines.push('');
 
   lines.push('## Patches Applied');
-  if (applied.length === 0) {
-    lines.push('None.');
-  } else {
-    for (const r of applied) {
-      const installed = r.installedVersion ?? r.previousVersion;
-      lines.push(
-        `- ${r.packageName}: ${r.previousVersion} → ${installed} (${r.status})`,
-      );
-    }
+  for (const r of applied) {
+    const installed = r.installedVersion ?? r.previousVersion;
+    lines.push(`- ${r.packageName}: ${r.previousVersion} → ${installed} (${r.status})`);
   }
   lines.push('');
 
@@ -312,11 +338,7 @@ function renderTemplate(session: PatchSession): string {
   lines.push('');
 
   lines.push('## Test Results');
-  if (applied.length === 0) {
-    lines.push('No tests run (no patches applied).');
-  } else {
-    lines.push('All tests passing after patch installation.');
-  }
+  lines.push('All tests passing after patch installation.');
 
   return lines.join('\n');
 }
