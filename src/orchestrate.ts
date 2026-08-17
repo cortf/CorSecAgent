@@ -224,6 +224,20 @@ export async function orchestrate(
   const _composePR = stages.composePR ?? composePR;
   const now = stages.now ?? Date.now;
 
+  // --since and --advisories-file are both representable together and the
+  // combination is meaningless: a recording is a point-in-time snapshot with its
+  // own window. Warned here rather than inside the fetcher, because this is the
+  // only place that can distinguish an explicitly-passed --since from the 24h
+  // default computed below — warning on the default would fire on every local
+  // replay run and train the reader to ignore it.
+  if (opts.advisoriesPath !== undefined && opts.sinceISO !== undefined) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[orchestrate] --since is ignored when --advisories-file is set; the ' +
+        'recording carries its own window.',
+    );
+  }
+
   await mkdir(opts.outputDir, { recursive: true });
 
   const hunterPath = join(opts.outputDir, 'hunter-matches.json');

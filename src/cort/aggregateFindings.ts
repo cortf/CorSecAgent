@@ -164,6 +164,20 @@ function fromTfsec(f: TfsecFinding): NormalizedFinding {
 // filePath, and lineRange become the AggregatedFinding's top-level fields.
 // Rule: highest severity wins; ties broken by preferring Checkov, for stable
 // ordering when both scanners flag the same thing at the same severity.
+//
+// This is an argmax, and that has a consequence worth stating: `best` is
+// replaced only when candRank > bestRank (or on an equal-rank tie-break), so
+// its rank is monotonically non-decreasing and on exit equals the group maximum.
+// SEVERITY_RANK is injective, so `pickRepresentative(group).severity` IS
+// max(group.severity) — which means the separate max-reconciliation loop in
+// aggregateFindings provably recomputes a value already available here.
+//
+// That loop is kept deliberately. Collapsing it would save about five lines and
+// turn a visible divergence (two independent computations that can be compared)
+// into a silent dependency on this function's tie-break rule never changing —
+// change the tie-break to prefer, say, the more detailed description, and the
+// reported severity would follow it. The property test in
+// tests/aggregateFindings.test.ts asserts the two agree.
 function pickRepresentative(group: NormalizedFinding[]): NormalizedFinding {
   // Callers always pass a non-empty group (it is the value side of a Map that
   // was populated as findings were normalised). The `!` reflects that

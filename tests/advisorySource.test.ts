@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -148,32 +148,6 @@ describe('fileAdvisoryFetcher — missing file (should throw)', () => {
     const missing = join(tmpdir(), `definitely-absent-${Date.now()}.json`);
     await expect(fileAdvisoryFetcher(missing)('2026-01-01T00:00:00.000Z', 'NPM'))
       .rejects.toThrow(missing);
-  });
-});
-
-describe('fileAdvisoryFetcher — --since alongside a recording', () => {
-  it('warns that the window is ignored instead of silently disagreeing', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      await withTempFile(JSON.stringify(MINIMAL), async (path) => {
-        await fileAdvisoryFetcher(path)('2020-01-01T00:00:00.000Z', 'NPM');
-      });
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('--since is ignored'));
-    } finally {
-      warn.mockRestore();
-    }
-  });
-
-  it('stays quiet when the requested window matches the recording', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      await withTempFile(JSON.stringify(MINIMAL), async (path) => {
-        await fileAdvisoryFetcher(path)(MINIMAL.sinceISO, 'NPM');
-      });
-      expect(warn).not.toHaveBeenCalled();
-    } finally {
-      warn.mockRestore();
-    }
   });
 });
 

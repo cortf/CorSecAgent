@@ -352,6 +352,51 @@ describe('aggregateFindings — uncategorized never deduplicates', () => {
   });
 });
 
+describe('aggregateFindings — reported severity is the max over sources', () => {
+  // A property, asserted over every finding rather than a hand-picked one.
+  //
+  // aggregateFindings computes the reported severity with a max loop, while
+  // pickRepresentative independently computes an argmax over the same group.
+  // Those are two paths to the same number, and this is what pins them
+  // together: if the representative's tie-break rule ever changes in a way that
+  // stops tracking severity, or the max loop is "simplified" into
+  // representative.severity, one of them moves and this fails.
+  const RANK = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 } as const;
+
+  it('holds across a mixed multi-scanner report', () => {
+    const checkov: CheckovReport = {
+      ...emptyCheckovReport(),
+      failed: [
+        checkovFinding({ checkId: 'CKV_AWS_19', resource: 'aws_s3_bucket.a', severity: 'LOW' }),
+        checkovFinding({ checkId: 'CKV_AWS_24', resource: 'aws_sg.b', severity: 'MEDIUM' }),
+        checkovFinding({ checkId: 'CKV_AWS_99991', resource: 'aws_thing.c', severity: 'HIGH' }),
+      ],
+    };
+    const tfsec: TfsecReport = {
+      ...emptyTfsecReport(),
+      failed: [
+        // Same (category, resource) as the LOW Checkov row above, at CRITICAL —
+        // so the merged finding must report CRITICAL, not LOW.
+        tfsecFinding({ ruleId: 'AVD-AWS-0088', resource: 'aws_s3_bucket.a', severity: 'CRITICAL' }),
+        tfsecFinding({ ruleId: 'AVD-AWS-0107', resource: 'aws_sg.b', severity: 'LOW' }),
+      ],
+    };
+
+    const report = aggregateFindings(checkov, tfsec, emptyAwsContext());
+
+    expect(report.findings.length).toBeGreaterThan(0);
+    for (const finding of report.findings) {
+      const maxSourceRank = Math.max(...finding.sources.map((s) => RANK[s.originalSeverity]));
+      expect(RANK[finding.severity]).toBe(maxSourceRank);
+    }
+
+    // Guard against the property holding only because nothing actually merged.
+    const merged = report.findings.find((f) => f.sources.length > 1);
+    expect(merged).toBeDefined();
+    expect(merged!.severity).toBe('CRITICAL');
+  });
+});
+
 describe('aggregateFindings — AWS context passthrough', () => {
   it('passes the AWS context report through unchanged into report.context', () => {
     const aws: AwsContextReport = {

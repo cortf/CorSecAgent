@@ -105,12 +105,15 @@ export function parseAdvisoryRecording(raw: string, path: string): AdvisoryRecor
  * implementation filtered client-side, so a mismatch produced 21 advisories
  * with empty node lists and a confident all-clear.
  *
- * `sinceISO` is not used for filtering — a recording is already a point-in-time
- * snapshot, and its own window is on the envelope. A caller passing `--since`
- * alongside `--advisories-file` gets a warning rather than silent surprise.
+ * `sinceISO` is accepted to satisfy the AdvisoryFetcher shape and then ignored:
+ * a recording is already a point-in-time snapshot and carries its own window on
+ * the envelope. Warning about that belongs to the caller, not here — this
+ * function cannot tell an explicitly-passed `--since` from the orchestrator's
+ * computed 24h default, and warning on the default would fire on every local
+ * replay run.
  */
 export function fileAdvisoryFetcher(path: string): AdvisoryFetcher {
-  return async (sinceISO, ecosystem) => {
+  return async (_sinceISO, ecosystem) => {
     let raw: string;
     try {
       raw = await readFile(path, 'utf-8');
@@ -127,14 +130,6 @@ export function fileAdvisoryFetcher(path: string): AdvisoryFetcher {
           `captured for ${recording.ecosystem} but this run requested ${ecosystem}. ` +
           'Replaying it would match nothing and report a false all-clear. Re-record ' +
           `for ${ecosystem}, or run with --ecosystem ${recording.ecosystem}.`,
-      );
-    }
-
-    if (sinceISO !== recording.sinceISO) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        `[advisorySource] --since is ignored when replaying a recording. ` +
-          `${path} covers ${recording.sinceISO} onward (captured ${recording.recordedAt}).`,
       );
     }
 
