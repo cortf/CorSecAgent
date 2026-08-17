@@ -3,6 +3,7 @@ import { mkdir, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 import { orchestrate, type OrchestrateOptions, type OrchestrationSummary } from '../src/orchestrate.js';
 import type { Ecosystem, MatchedThreat } from '../src/hunter/types.js';
@@ -458,6 +459,82 @@ describe('orchestrate — no --terraform-dir provided', () => {
         await readFile(join(dir, 'cort-report.json'), 'utf-8'),
       ) as { findings: unknown[] };
       expect(cortOnDisk.findings).toEqual([]);
+    } finally {
+      await cleanup();
+    }
+  });
+});
+
+describe('orchestrate — replaying a recorded advisory file', () => {
+  // The local end-to-end path (scripts/run-local.sh) runs entirely through
+  // advisoriesPath, and had no coverage at all.
+  const RECORDING = fileURLToPath(
+    new URL('../fixtures/recorded-advisories.json', import.meta.url),
+  );
+
+  it('passes a replay fetcher to Hunter instead of the live GitHub client', async () => {
+    const { dir, cleanup } = await makeTmpDir();
+    try {
+      const fakeHunter = vi.fn(
+        async (opts: { outputPath: string }, fetcher?: unknown) => {
+          // Prove the orchestrator supplied a fetcher, and that calling it
+          // reaches the recording rather than the network.
+          expect(typeof fetcher).toBe('function');
+          const advisories = await (
+            fetcher as (s: string, e: Ecosystem) => Promise<unknown[]>
+          )('2026-07-17T17:29:23.000Z', 'NPM');
+          expect(advisories).toHaveLength(21);
+          await writeFile(opts.outputPath, JSON.stringify([SAMPLE_MATCH]), 'utf-8');
+          return { matchCount: 1 };
+        },
+      );
+
+      const summary = await orchestrate(
+        baseOpts(dir, { advisoriesPath: RECORDING }),
+        {
+          runHunter: fakeHunter,
+          applyPatches: makeFakeApplyPatches(happyPatchSession()),
+          composePR: makeFakeComposePR(),
+          llmClient: makeFakeLLMClient(),
+        },
+      );
+
+      expect(summary.finalExitCode).toBe(0);
+      expect(fakeHunter).toHaveBeenCalledOnce();
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('fails loudly on an ecosystem mismatch rather than reporting a clean run', async () => {
+    // Previously this combination filtered every node away client-side, so
+    // Hunter saw 21 advisories with empty node lists, matchCount was 0, and the
+    // orchestrator exited 0 with "No vulnerabilities found".
+    //
+    // Uses the real runHunter (no injected fake) so the failure travels the
+    // production path. workingDir points at the repo root because runHunter
+    // resolves the lockfile concurrently with the fetch — an unreadable
+    // working dir would reject Promise.all first and mask the mismatch.
+    const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
+    const { dir, cleanup } = await makeTmpDir();
+    try {
+      const summary = await orchestrate(
+        baseOpts(dir, {
+          workingDir: REPO_ROOT,
+          advisoriesPath: RECORDING,
+          ecosystem: 'PIP' as Ecosystem,
+        }),
+        {
+          applyPatches: makeFakeApplyPatches(happyPatchSession()),
+          composePR: makeFakeComposePR(),
+          llmClient: makeFakeLLMClient(),
+        },
+      );
+
+      expect(summary.finalExitCode).toBe(1);
+      const hunterStage = summary.stages.find((s) => s.name === 'hunter');
+      expect(hunterStage?.status).toBe('failed');
+      expect(hunterStage?.errorMessage).toMatch(/ecosystem mismatch/);
     } finally {
       await cleanup();
     }

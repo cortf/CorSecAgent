@@ -3,12 +3,15 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { fetchRecentAdvisories } from './fetchAdvisories.js';
 import { loadInstalledVersions, matchAdvisoriesAgainstDeps } from './matchDependencies.js';
-import type { Advisory, Ecosystem } from './types.js';
+import type { AdvisoryFetcher } from './advisorySource.js';
+// types.ts is no longer type-only: ECOSYSTEMS and isEcosystem are values.
+import { ECOSYSTEMS, isEcosystem } from './types.js';
+import type { Ecosystem } from './types.js';
 
 // Injecting the advisory-fetcher as an optional last param keeps network I/O out
 // of tests without coupling test code to module internals. When omitted, the real
-// fetchRecentAdvisories is used — which requires GITHUB_TOKEN.
-type AdvisoryFetcher = (sinceISO: string, ecosystem: Ecosystem) => Promise<Advisory[]>;
+// fetchRecentAdvisories is used — which requires GITHUB_TOKEN. The type itself
+// lives in advisorySource.ts, which owns the whole replay contract.
 
 export interface RunHunterOptions {
   sinceISO: string;
@@ -30,10 +33,6 @@ export async function runHunter(
   const matches = matchAdvisoriesAgainstDeps(advisories, installed);
   await writeFile(opts.outputPath, JSON.stringify(matches, null, 2), 'utf-8');
   return { matchCount: matches.length };
-}
-
-function isEcosystem(s: string): s is Ecosystem {
-  return s === 'NPM' || s === 'PIP' || s === 'MAVEN';
 }
 
 // Only runs when this file is executed directly (e.g. npx tsx src/hunter/run.ts).
@@ -60,7 +59,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
   const rawEcosystem = values.ecosystem ?? 'NPM';
   if (!isEcosystem(rawEcosystem)) {
-    console.error('Error: --ecosystem must be one of NPM, PIP, MAVEN');
+    console.error(`Error: --ecosystem must be one of ${ECOSYSTEMS.join(', ')}`);
     process.exit(1);
   }
 

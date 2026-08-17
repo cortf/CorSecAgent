@@ -21,13 +21,16 @@
 //      stage. The workflow can re-trigger the entire job if a retry is
 //      desired.
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { runHunter } from './hunter/run.js';
-import type { Advisory, Ecosystem } from './hunter/types.js';
+import { fileAdvisoryFetcher } from './hunter/advisorySource.js';
+// types.ts is no longer type-only: ECOSYSTEMS and isEcosystem are values.
+import { ECOSYSTEMS, isEcosystem } from './hunter/types.js';
+import type { Ecosystem } from './hunter/types.js';
 import { runCheckov } from './cort/runCheckov.js';
 import { runTfsec } from './cort/runTfsec.js';
 import { runAwsContextChecks } from './cort/awsContextChecks.js';
@@ -160,43 +163,6 @@ function synthEmptyPatchSession(branchName: string): PatchSession {
         'skipped-already-resolved': 0,
       },
     },
-  };
-}
-
-// Build a drop-in replacement for `fetchRecentAdvisories` that reads a recorded
-// payload off disk. The file holds the same `Advisory[]` shape the GraphQL query
-// returns, so a recording captured from the live API replays exactly.
-//
-// The ecosystem filter is applied here because the live query filters
-// server-side (`vulnerabilities(ecosystem: $ecosystem)`); without it a mixed
-// recording would surface PIP packages during an NPM run. `sinceISO` is ignored
-// — the recording is already a point-in-time snapshot.
-function fileAdvisoryFetcher(
-  path: string,
-): (sinceISO: string, ecosystem: Ecosystem) => Promise<Advisory[]> {
-  return async (_sinceISO, ecosystem) => {
-    let raw: string;
-    try {
-      raw = await readFile(path, 'utf-8');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new Error(`orchestrate: cannot read advisories file ${path}: ${msg}`);
-    }
-    let all: Advisory[];
-    try {
-      all = JSON.parse(raw) as Advisory[];
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new Error(`orchestrate: malformed JSON in advisories file ${path}: ${msg}`);
-    }
-    return all.map((advisory) => ({
-      ...advisory,
-      vulnerabilities: {
-        nodes: advisory.vulnerabilities.nodes.filter(
-          (node) => node.package.ecosystem === ecosystem,
-        ),
-      },
-    }));
   };
 }
 
@@ -481,10 +447,6 @@ function settle<T>(
   return { value: fallback(), status: 'failed' };
 }
 
-function isEcosystem(s: string): s is Ecosystem {
-  return s === 'NPM' || s === 'PIP' || s === 'MAVEN';
-}
-
 // ─── CLI entry point ─────────────────────────────────────────────────────────
 // Guarded so importing this module from tests does not start a CLI run.
 
@@ -513,7 +475,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const ecosystemRaw = values.ecosystem ?? 'NPM';
   if (!isEcosystem(ecosystemRaw)) {
     // eslint-disable-next-line no-console
-    console.error('Error: --ecosystem must be one of NPM, PIP, MAVEN');
+    console.error(`Error: --ecosystem must be one of ${ECOSYSTEMS.join(', ')}`);
     process.exit(1);
   }
 
