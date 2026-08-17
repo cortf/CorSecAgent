@@ -1,9 +1,9 @@
-import { spawn } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { MatchedThreat } from '../hunter/types.js';
 import { loadInstalledVersions } from '../hunter/matchDependencies.js';
 import { isVersionInRange } from '../shared/semverRange.js';
+import { spawnCapture } from '../shared/spawnCapture.js';
 import type { PatchResult, PatchSession, PatchStatus } from './types.js';
 
 // Captured stream + exit triple. Same shape that the Cort scanner executors
@@ -323,30 +323,9 @@ function truncateTail(s: string, maxBytes: number): string {
 // these functions are never reached.
 
 function spawnWithArgs(binary: string, args: string[], cwd: string): Promise<ExecResult> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(binary, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-    child.stdout.on('data', (c: Buffer) => stdoutChunks.push(c));
-    child.stderr.on('data', (c: Buffer) => stderrChunks.push(c));
-    child.on('error', (err: NodeJS.ErrnoException) => {
-      if (err.code === 'ENOENT') {
-        reject(
-          new Error(
-            `applyPatches: '${binary}' binary not found on PATH. Install it and re-run.`,
-          ),
-        );
-        return;
-      }
-      reject(err);
-    });
-    child.on('close', (code) => {
-      resolve({
-        stdout: Buffer.concat(stdoutChunks).toString('utf-8'),
-        stderr: Buffer.concat(stderrChunks).toString('utf-8'),
-        exitCode: code ?? 0,
-      });
-    });
+  return spawnCapture(binary, args, {
+    cwd,
+    notFoundMessage: `applyPatches: '${binary}' binary not found on PATH. Install it and re-run.`,
   });
 }
 
@@ -356,19 +335,9 @@ const defaultNpm: NpmExecutor = (args, cwd) => spawnWithArgs('npm', args, cwd);
 // shell: true lets the user pass any test command string (including pipes,
 // env vars, npm-script names) without us having to parse argv. Matches the
 // way humans actually invoke their test suites.
+//
+// No notFoundMessage: under a shell there is no ENOENT to translate — an
+// unknown command is the shell's own exit 127, which the caller already reads
+// as a failed test run.
 const defaultShell: ShellExecutor = (command, cwd) =>
-  new Promise((resolve, reject) => {
-    const child = spawn(command, { cwd, shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-    child.stdout?.on('data', (c: Buffer) => stdoutChunks.push(c));
-    child.stderr?.on('data', (c: Buffer) => stderrChunks.push(c));
-    child.on('error', reject);
-    child.on('close', (code) => {
-      resolve({
-        stdout: Buffer.concat(stdoutChunks).toString('utf-8'),
-        stderr: Buffer.concat(stderrChunks).toString('utf-8'),
-        exitCode: code ?? 0,
-      });
-    });
-  });
+  spawnCapture(command, [], { cwd, shell: true });

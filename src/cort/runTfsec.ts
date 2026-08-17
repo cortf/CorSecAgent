@@ -1,5 +1,5 @@
-import { spawn } from 'node:child_process';
 import { stat } from 'node:fs/promises';
+import { spawnCapture } from '../shared/spawnCapture.js';
 import type { TfsecFinding, TfsecReport, TfsecSeverity } from './types.js';
 
 // Minimal callable interface for invoking the tfsec CLI.
@@ -137,31 +137,7 @@ function normaliseSeverity(raw: string | undefined): TfsecSeverity {
 // binary download, container) so we point at the project README rather than
 // prescribing one command.
 const defaultExecutor: TfsecExecutor = (args) =>
-  new Promise((resolve, reject) => {
-    const child = spawn('tfsec', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-
-    child.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
-    child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
-
-    child.on('error', (err: NodeJS.ErrnoException) => {
-      if (err.code === 'ENOENT') {
-        reject(
-          new Error(
-            "runTfsec: 'tfsec' binary not found on PATH. Install instructions vary by platform — see https://github.com/aquasecurity/tfsec",
-          ),
-        );
-        return;
-      }
-      reject(err);
-    });
-
-    child.on('close', (code) => {
-      resolve({
-        stdout: Buffer.concat(stdoutChunks).toString('utf-8'),
-        stderr: Buffer.concat(stderrChunks).toString('utf-8'),
-        exitCode: code ?? 0,
-      });
-    });
+  spawnCapture('tfsec', args, {
+    notFoundMessage:
+      "runTfsec: 'tfsec' binary not found on PATH. Install instructions vary by platform — see https://github.com/aquasecurity/tfsec",
   });

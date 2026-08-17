@@ -1,5 +1,5 @@
-import { spawn } from 'node:child_process';
 import { stat } from 'node:fs/promises';
+import { spawnCapture } from '../shared/spawnCapture.js';
 import type { CheckResult, CheckSeverity, CheckovFinding, CheckovReport } from './types.js';
 
 // Minimal callable interface for invoking the Checkov CLI.
@@ -138,31 +138,7 @@ function normaliseSeverity(raw: string | null): CheckSeverity | null {
 // concrete install hint, since "spawn checkov ENOENT" alone is not actionable
 // for a first-time user.
 const defaultExecutor: CheckovExecutor = (args) =>
-  new Promise((resolve, reject) => {
-    const child = spawn('checkov', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-
-    child.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
-    child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
-
-    child.on('error', (err: NodeJS.ErrnoException) => {
-      if (err.code === 'ENOENT') {
-        reject(
-          new Error(
-            "runCheckov: 'checkov' binary not found on PATH. Install it with `pip install checkov` (or `pipx install checkov`).",
-          ),
-        );
-        return;
-      }
-      reject(err);
-    });
-
-    child.on('close', (code) => {
-      resolve({
-        stdout: Buffer.concat(stdoutChunks).toString('utf-8'),
-        stderr: Buffer.concat(stderrChunks).toString('utf-8'),
-        exitCode: code ?? 0,
-      });
-    });
+  spawnCapture('checkov', args, {
+    notFoundMessage:
+      "runCheckov: 'checkov' binary not found on PATH. Install it with `pip install checkov` (or `pipx install checkov`).",
   });
