@@ -7,8 +7,8 @@
 //
 //   * production code constructs `AnthropicLLMClient` (which talks to the
 //     real API and requires ANTHROPIC_API_KEY);
-//   * tests construct `FakeLLMClient` with a canned response, so CI never
-//     hits the real API and costs zero per run.
+//   * tests construct the `FakeLLMClient` in tests/helpers/ with a canned
+//     response, so CI never hits the real API and costs zero per run.
 //
 // The shape is deliberately narrower than the SDK's `messages.create`:
 // no streaming, no multi-turn, no tool use, no image content. Reporter
@@ -78,6 +78,22 @@ export class AnthropicLLMClient implements LLMClient {
     this.sdk = new Anthropic({ apiKey }) as unknown as AnthropicSDKLike;
   }
 
+  /**
+   * Construct a real client, or return null when ANTHROPIC_API_KEY is unset.
+   *
+   * "Is the LLM available" is a question with a legitimate negative answer —
+   * the Reporter's template mode needs no key at all — so it belongs in the
+   * return value rather than in an exception. The constructor's throw forced
+   * the orchestrator into a try/catch that swallowed the error and passed
+   * `undefined` onward, after which composePR could construct the same client
+   * again and throw the same error later from a different stack. Two places
+   * deciding the same thing, with no shared representation.
+   */
+  static tryCreate(): AnthropicLLMClient | null {
+    if (!process.env['ANTHROPIC_API_KEY']) return null;
+    return new AnthropicLLMClient();
+  }
+
   async complete(opts: LLMCompleteOptions): Promise<LLMCompleteResult> {
     const response = await this.sdk.messages.create({
       model: opts.model,
@@ -107,27 +123,8 @@ export class AnthropicLLMClient implements LLMClient {
   }
 }
 
-// Canned-response fake. Constructed with the exact text the test wants the
-// reporter to receive. Records every call it sees so tests can assert on
-// system prompt / user message contents.
-export class FakeLLMClient implements LLMClient {
-  public readonly calls: LLMCompleteOptions[] = [];
-  private readonly cannedResponse: string;
-  private readonly inputTokens: number;
-  private readonly outputTokens: number;
-
-  constructor(cannedResponse: string, tokenCounts?: { input: number; output: number }) {
-    this.cannedResponse = cannedResponse;
-    this.inputTokens = tokenCounts?.input ?? 0;
-    this.outputTokens = tokenCounts?.output ?? 0;
-  }
-
-  async complete(opts: LLMCompleteOptions): Promise<LLMCompleteResult> {
-    this.calls.push(opts);
-    return {
-      text: this.cannedResponse,
-      inputTokens: this.inputTokens,
-      outputTokens: this.outputTokens,
-    };
-  }
-}
+// NOTE: the canned-response FakeLLMClient used to live here. It has no
+// production consumer, and tsconfig compiles src/** with declaration: true into
+// dist — so a test double was being built and shipped in the package output. It
+// now lives in tests/helpers/fakeLLMClient.ts, which is where its only callers
+// are.

@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { composePR, __testing } from '../src/reporter/composePR.js';
 import {
   AnthropicLLMClient,
-  FakeLLMClient,
   type AnthropicSDKLike,
 } from '../src/shared/llmClient.js';
+import { FakeLLMClient } from './helpers/fakeLLMClient.js';
 
 // -----------------------------------------------------------------------------
 // Fixtures and helpers

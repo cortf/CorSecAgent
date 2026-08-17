@@ -50,15 +50,30 @@ import {
 
 type StageStatus = 'success' | 'failed' | 'skipped';
 
-interface StageRecord {
-  name: string;
-  status: StageStatus;
-  durationMs: number;
-  errorMessage?: string;
-  // Per-scanner attribution inside the Cort stage. Populated only on the
-  // Cort record so a single failed scanner is observable in the summary.
-  subStages?: Record<string, StageStatus>;
-}
+// Discriminated on `status` so the message and the outcome cannot disagree.
+// The previous flat shape allowed {status:'success', errorMessage:'boom'} and,
+// more importantly, {status:'failed'} with NO errorMessage — nothing forced it
+// on, and three hand-written catch blocks were the only thing supplying it. The
+// operator-facing jq table in corsec-pipeline.yml renders these records
+// directly, so a failed stage with no message is a real hole.
+//
+// `subStages` stays optional on every arm: it is populated only by Cort, whose
+// own status can be any of the three.
+type StageRecord =
+  | {
+      name: string;
+      status: 'success' | 'skipped';
+      durationMs: number;
+      subStages?: Record<string, StageStatus>;
+    }
+  | {
+      name: string;
+      status: 'failed';
+      durationMs: number;
+      // Required, not optional — that is the point of the split.
+      errorMessage: string;
+      subStages?: Record<string, StageStatus>;
+    };
 
 export interface OrchestrationSummary {
   stages: StageRecord[];
@@ -214,6 +229,46 @@ export async function orchestrate(
   let branchName: string | null = null;
   const tokens = { input: 0, output: 0 };
 
+  // Push a record and emit its completion log from ONE captured duration.
+  //
+  // Reusing the same number for both is load-bearing rather than tidy: the test
+  // clock stub advances 100ms on every call, so calling now() a second time to
+  // build the log line would double the recorded duration for every stage.
+  const recordStage = (record: StageRecord): void => {
+    stageRecords.push(record);
+    stageLog(record.name, 'complete', record.durationMs);
+  };
+
+  // The three throwing stages (hunter, patcher, reporter) share the whole
+  // log-start / capture-start / compute-duration / push-record / log-complete
+  // ritual and differ only in their degradation *policy* — which is the thing
+  // worth reading, and was previously buried in near-textual copies of that
+  // boilerplate.
+  //
+  // Returns an outcome value rather than rethrowing, so each call site states
+  // its policy in the open. Cort deliberately does not use this: it never
+  // throws (its status is derived from three settled sub-results), so it keeps
+  // a bespoke path over the shared recordStage primitive. One helper honestly
+  // does not fit all four.
+  const runStage = async <T>(
+    name: string,
+    fn: () => Promise<T>,
+  ): Promise<{ ok: true; value: T } | { ok: false; error: string }> => {
+    stageLog(name, 'started');
+    const start = now();
+    try {
+      const value = await fn();
+      recordStage({ name, status: 'success', durationMs: now() - start });
+      return { ok: true, value };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      recordStage({ name, status: 'failed', durationMs: now() - start, errorMessage: error });
+      // eslint-disable-next-line no-console
+      console.error(`[orchestrate] ${name} failed: ${error}`);
+      return { ok: false, error };
+    }
+  };
+
   const writeSummary = async (finalExitCode: number): Promise<OrchestrationSummary> => {
     const summary: OrchestrationSummary = {
       stages: stageRecords,
@@ -229,10 +284,9 @@ export async function orchestrate(
   };
 
   // ─── Hunter ────────────────────────────────────────────────────────────────
-  stageLog('hunter', 'started');
-  const hunterStart = now();
-  try {
-    const result = await _runHunter(
+  // Policy: abort. There is no point continuing without matches.
+  const hunter = await runStage('hunter', () =>
+    _runHunter(
       {
         sinceISO: opts.sinceISO ?? new Date(now() - 24 * 60 * 60 * 1000).toISOString(),
         ecosystem: opts.ecosystem,
@@ -242,25 +296,10 @@ export async function orchestrate(
       },
       // undefined falls through to runHunter's default (the live GitHub client).
       opts.advisoriesPath ? fileAdvisoryFetcher(opts.advisoriesPath) : undefined,
-    );
-    matchCount = result.matchCount;
-    const duration = now() - hunterStart;
-    stageRecords.push({ name: 'hunter', status: 'success', durationMs: duration });
-    stageLog('hunter', 'complete', duration);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const duration = now() - hunterStart;
-    stageRecords.push({
-      name: 'hunter',
-      status: 'failed',
-      durationMs: duration,
-      errorMessage: msg,
-    });
-    stageLog('hunter', 'complete', duration);
-    // eslint-disable-next-line no-console
-    console.error(`[orchestrate] hunter failed: ${msg}`);
-    return writeSummary(1);
-  }
+    ),
+  );
+  if (!hunter.ok) return writeSummary(1);
+  matchCount = hunter.value.matchCount;
 
   if (matchCount === 0) {
     // eslint-disable-next-line no-console
@@ -279,7 +318,13 @@ export async function orchestrate(
   let checkov = emptyCheckovReport();
   let tfsec = emptyTfsecReport();
   let aws = emptyAwsContextReport();
-  let cortOverall: StageStatus = 'skipped';
+  // Cort's status is derived from three settled sub-results rather than thrown,
+  // so it is tracked as a small tagged value instead of going through runStage.
+  // Modelling it this way means the 'failed' case cannot be recorded without
+  // the message that explains it.
+  let cortOutcome:
+    | { status: 'success' | 'skipped' }
+    | { status: 'failed'; errorMessage: string } = { status: 'skipped' };
   const cortSubStages: Record<string, StageStatus> = {
     checkov: 'skipped',
     tfsec: 'skipped',
@@ -309,123 +354,90 @@ export async function orchestrate(
     cortSubStages['awsContext'] = awsSettled.status;
 
     // Rollup computed from the three results in hand rather than by re-scanning
-    // the stringly-keyed sub-stage record.
-    cortOverall = [checkovSettled, tfsecSettled, awsSettled].every(
-      (s) => s.status === 'failed',
-    )
-      ? 'failed'
-      : 'success';
+    // the stringly-keyed sub-stage record. Partial failure is still 'success':
+    // the surviving scanners' findings are real and the aggregate is usable.
+    const settled = [checkovSettled, tfsecSettled, awsSettled];
+    const errors = settled.map((s) => s.error).filter((e): e is string => e !== null);
+    cortOutcome =
+      errors.length === settled.length
+        ? { status: 'failed', errorMessage: `every Cort scanner failed — ${errors.join('; ')}` }
+        : { status: 'success' };
   }
 
   const cortReport = aggregateFindings(checkov, tfsec, aws);
   await writeFile(cortPath, JSON.stringify(cortReport, null, 2), 'utf-8');
   const cortDuration = now() - cortStart;
-  stageRecords.push({
-    name: 'cort',
-    status: cortOverall,
-    durationMs: cortDuration,
-    subStages: cortSubStages,
-  });
-  stageLog('cort', 'complete', cortDuration);
+  recordStage(
+    cortOutcome.status === 'failed'
+      ? {
+          name: 'cort',
+          status: 'failed',
+          durationMs: cortDuration,
+          errorMessage: cortOutcome.errorMessage,
+          subStages: cortSubStages,
+        }
+      : {
+          name: 'cort',
+          status: cortOutcome.status,
+          durationMs: cortDuration,
+          subStages: cortSubStages,
+        },
+  );
 
   // ─── Patcher ───────────────────────────────────────────────────────────────
-  stageLog('patcher', 'started');
-  const patcherStart = now();
-  let patchSession: PatchSession | null = null;
-  try {
-    patchSession = await _applyPatches({
+  // Policy: degrade. Substitute a synthetic empty session and carry on, so the
+  // Reporter still produces a document describing the run.
+  const patcher = await runStage('patcher', () =>
+    _applyPatches({
       matchesPath: hunterPath,
       outputPath: patchPath,
       workingDir: opts.workingDir,
       testCommand: opts.testCommand,
-    });
-    branchName = patchSession.branchName;
-    const duration = now() - patcherStart;
-    stageRecords.push({ name: 'patcher', status: 'success', durationMs: duration });
-    stageLog('patcher', 'complete', duration);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const synthBranch = `corsec/hotfix/${Math.floor(now() / 1000)}`;
-    patchSession = synthEmptyPatchSession(synthBranch);
+    }),
+  );
+  if (patcher.ok) {
+    branchName = patcher.value.branchName;
+  } else {
+    const patchSession = synthEmptyPatchSession(`corsec/hotfix/${Math.floor(now() / 1000)}`);
     branchName = patchSession.branchName;
     // Persist the synthetic session so the Reporter can still read it from
     // disk via composePR's existing path-based interface.
     await writeFile(patchPath, JSON.stringify(patchSession, null, 2), 'utf-8');
-    const duration = now() - patcherStart;
-    stageRecords.push({
-      name: 'patcher',
-      status: 'failed',
-      durationMs: duration,
-      errorMessage: msg,
-    });
-    stageLog('patcher', 'complete', duration);
-    // eslint-disable-next-line no-console
-    console.error(`[orchestrate] patcher failed: ${msg}`);
   }
 
   // ─── Reporter ──────────────────────────────────────────────────────────────
-  stageLog('reporter', 'started');
-  const reporterStart = now();
+  //
+  // Wrap whatever LLM client is available so the run's input/output token
+  // totals land in the summary. "Is the LLM available" is answered once, here,
+  // as a value: tryCreate returns null when ANTHROPIC_API_KEY is unset rather
+  // than throwing an error we would then catch purely for control flow.
+  // composePR may still succeed in template mode without a client, and will
+  // raise its own error if the LLM branch is actually entered.
+  const baseClient = stages.llmClient ?? AnthropicLLMClient.tryCreate();
+  const accumulator = baseClient === null ? null : new TokenAccumulator(baseClient);
 
-  // Wrap whatever LLM client was injected (or the real Anthropic client)
-  // so we can read input/output totals for the summary. Construct lazily so
-  // missing ANTHROPIC_API_KEY only errors if the LLM branch is actually
-  // taken — which we cannot know without composePR's mode-decision running.
-  let accumulator: TokenAccumulator | null = null;
-  const llmClientForReporter: LLMClient | undefined = (() => {
-    if (stages.llmClient) {
-      accumulator = new TokenAccumulator(stages.llmClient);
-      return accumulator;
-    }
-    try {
-      accumulator = new TokenAccumulator(new AnthropicLLMClient());
-      return accumulator;
-    } catch {
-      // No API key — composePR may still succeed via template mode. Pass
-      // undefined so composePR's default-construction path runs (and throws
-      // only if the LLM branch is actually entered).
-      accumulator = null;
-      return undefined;
-    }
-  })();
-
-  try {
-    await _composePR(
+  // Policy: abort. There is no point carrying on past a malformed PR description.
+  const reporter = await runStage('reporter', () =>
+    _composePR(
       {
         matchesPath: hunterPath,
         cortReportPath: cortPath,
         patchSessionPath: patchPath,
         outputPath: prPath,
       },
-      llmClientForReporter,
-    );
-    if (accumulator) {
-      tokens.input = accumulator.totalInput;
-      tokens.output = accumulator.totalOutput;
-    }
-    const duration = now() - reporterStart;
-    stageRecords.push({ name: 'reporter', status: 'success', durationMs: duration });
-    stageLog('reporter', 'complete', duration);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (accumulator) {
-      tokens.input = accumulator.totalInput;
-      tokens.output = accumulator.totalOutput;
-    }
-    const duration = now() - reporterStart;
-    stageRecords.push({
-      name: 'reporter',
-      status: 'failed',
-      durationMs: duration,
-      errorMessage: msg,
-    });
-    stageLog('reporter', 'complete', duration);
-    // eslint-disable-next-line no-console
-    console.error(`[orchestrate] reporter failed: ${msg}`);
-    return writeSummary(1);
+      accumulator ?? undefined,
+    ),
+  );
+
+  // Read the totals on both paths — a Reporter that threw may still have spent
+  // tokens before doing so, and an unreported cost is the one we most want to
+  // see in the summary.
+  if (accumulator) {
+    tokens.input = accumulator.totalInput;
+    tokens.output = accumulator.totalOutput;
   }
 
-  return writeSummary(0);
+  return writeSummary(reporter.ok ? 0 : 1);
 }
 
 function stringifyErr(reason: unknown): string {
@@ -445,13 +457,17 @@ function settle<T>(
   result: PromiseSettledResult<T>,
   fallback: () => T,
   label: string,
-): { value: T; status: StageStatus } {
+): { value: T; status: StageStatus; error: string | null } {
   if (result.status === 'fulfilled') {
-    return { value: result.value, status: 'success' };
+    return { value: result.value, status: 'success', error: null };
   }
+  const error = stringifyErr(result.reason);
   // eslint-disable-next-line no-console
-  console.error(`[orchestrate] ${label} failed: ${stringifyErr(result.reason)}`);
-  return { value: fallback(), status: 'failed' };
+  console.error(`[orchestrate] ${label} failed: ${error}`);
+  // The message is carried, not just logged: when all three scanners fail the
+  // Cort stage record needs an errorMessage, and stdout is not readable from
+  // the summary artifact the workflow's job summary renders.
+  return { value: fallback(), status: 'failed', error: `${label}: ${error}` };
 }
 
 // ─── CLI entry point ─────────────────────────────────────────────────────────

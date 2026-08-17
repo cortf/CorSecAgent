@@ -209,7 +209,15 @@ describe('orchestrate — Hunter throws', () => {
 
       const hunterStage = summary.stages.find((s) => s.name === 'hunter');
       expect(hunterStage?.status).toBe('failed');
-      expect(hunterStage?.errorMessage).toMatch(/Hunter boom/);
+      expect(hunterStage).toHaveProperty('errorMessage', expect.stringMatching(/Hunter boom/));
+
+      // A successful stage must carry no errorMessage key at all — not the key
+      // set to undefined. The jq table in the workflow's job summary reads
+      // these records directly.
+      const successStages = summary.stages.filter((s) => s.status === 'success');
+      for (const stage of successStages) {
+        expect('errorMessage' in stage).toBe(false);
+      }
 
       // Summary file written even on failure.
       const onDisk = JSON.parse(
@@ -289,6 +297,15 @@ describe('orchestrate — every Cort scanner fails', () => {
         tfsec: 'failed',
         awsContext: 'failed',
       });
+
+      // A failed stage must carry a message. The workflow's job summary renders
+      // these records with jq, and a failed row with a blank reason is exactly
+      // what the operator cannot act on. Each scanner's own error is named.
+      expect(cortStage).toHaveProperty('errorMessage');
+      const cortError = (cortStage as { errorMessage: string }).errorMessage;
+      expect(cortError).toContain('checkov crashed');
+      expect(cortError).toContain('tfsec crashed');
+      expect(cortError).toContain('aws crashed');
 
       // Degradation, not abort: a totally failed Cort stage must not stop the
       // pipeline, and the run still exits 0.
@@ -564,15 +581,21 @@ describe('orchestrate — stage timing captured in summary', () => {
       });
 
       expect(summary.finalExitCode).toBe(0);
-      for (const stage of summary.stages) {
-        expect(stage.durationMs).toBeGreaterThan(0);
-      }
       expect(summary.stages.map((s) => s.name)).toEqual([
         'hunter',
         'cort',
         'patcher',
         'reporter',
       ]);
+
+      // Exact values, not just "> 0". The stub advances 100ms on EVERY call, so
+      // each duration is a function of how many times now() is invoked inside
+      // the stage — and this array is the only thing pinning that count. A
+      // refactor that calls now() once for the record and again for the log
+      // line would silently double a duration, and a `> 0` assertion would sail
+      // straight past it. Hunter is 200 because it calls now() once more to
+      // compute the default 24h advisory window.
+      expect(summary.stages.map((s) => s.durationMs)).toEqual([200, 100, 100, 100]);
     } finally {
       await cleanup();
     }
