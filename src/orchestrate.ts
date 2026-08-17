@@ -32,12 +32,7 @@ import { runCheckov } from './cort/runCheckov.js';
 import { runTfsec } from './cort/runTfsec.js';
 import { runAwsContextChecks } from './cort/awsContextChecks.js';
 import { aggregateFindings } from './cort/aggregateFindings.js';
-import type {
-  AggregatedReport,
-  AwsContextReport,
-  CheckovReport,
-  TfsecReport,
-} from './cort/types.js';
+import type { AwsContextReport, CheckovReport, TfsecReport } from './cort/types.js';
 import { applyPatches } from './patcher/applyPatches.js';
 import type { PatchSession } from './patcher/types.js';
 import { composePR } from './reporter/composePR.js';
@@ -126,33 +121,11 @@ class TokenAccumulator implements LLMClient {
   }
 }
 
-// Empty AggregatedReport — used when no terraform-dir was provided OR every
-// scanner failed. The Reporter still runs against this shape; it will pick
-// template mode (no findings, zero non-compliant, zero ALBs == empty account
-// is a wash) so the LLM call is correctly skipped.
-function emptyAggregatedReport(): AggregatedReport {
-  return {
-    findings: [],
-    context: {
-      alb: { albCount: 0, albArns: [] },
-      imdsv2: { checked: [], compliantCount: 0, nonCompliantCount: 0 },
-    },
-    summary: {
-      totalFindings: 0,
-      bySeverity: { LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0 },
-      byCategory: {
-        'encryption-at-rest': 0,
-        'encryption-in-transit': 0,
-        'network-exposure': 0,
-        'identity-and-access': 0,
-        'logging-and-monitoring': 0,
-        'secrets-management': 0,
-        uncategorized: 0,
-      },
-    },
-  };
-}
-
+// Per-scanner fallbacks. These are what a failed (or never-run) scanner
+// contributes to the aggregate. There is deliberately no hand-written empty
+// *AggregatedReport* to go with them: aggregating these three empty inputs
+// produces it exactly, key-insertion order included, so restating the whole
+// FindingCategory taxonomy here would just be a second copy to keep in sync.
 function emptyCheckovReport(): CheckovReport {
   return { passed: [], failed: [], skipped: [] };
 }
@@ -322,7 +295,15 @@ export async function orchestrate(
   // ─── Cort ──────────────────────────────────────────────────────────────────
   stageLog('cort', 'started');
   const cortStart = now();
-  let cortReport: AggregatedReport = emptyAggregatedReport();
+
+  // No terraform-dir: every sub-stage stays 'skipped' and the three empty
+  // scanner reports flow into the aggregator unchanged. Reporter still runs
+  // against the result and will pick template mode (no findings, zero
+  // non-compliant, zero ALBs — an empty account is a wash), so no LLM call.
+  let checkov = emptyCheckovReport();
+  let tfsec = emptyTfsecReport();
+  let aws = emptyAwsContextReport();
+  let cortOverall: StageStatus = 'skipped';
   const cortSubStages: Record<string, StageStatus> = {
     checkov: 'skipped',
     tfsec: 'skipped',
@@ -336,43 +317,33 @@ export async function orchestrate(
       _runAwsContextChecks(),
     ]);
 
-    const checkov =
-      checkovRes.status === 'fulfilled' ? checkovRes.value : emptyCheckovReport();
-    const tfsec =
-      tfsecRes.status === 'fulfilled' ? tfsecRes.value : emptyTfsecReport();
-    const aws =
-      awsRes.status === 'fulfilled' ? awsRes.value : emptyAwsContextReport();
+    // One decision per scanner instead of three. Value, status and error log
+    // now come out of a single branch, so a 'success' sub-stage sitting beside
+    // a fallback empty report is no longer representable.
+    const checkovSettled = settle(checkovRes, emptyCheckovReport, 'checkov');
+    const tfsecSettled = settle(tfsecRes, emptyTfsecReport, 'tfsec');
+    const awsSettled = settle(awsRes, emptyAwsContextReport, 'aws-context');
 
-    cortSubStages['checkov'] = checkovRes.status === 'fulfilled' ? 'success' : 'failed';
-    cortSubStages['tfsec'] = tfsecRes.status === 'fulfilled' ? 'success' : 'failed';
-    cortSubStages['awsContext'] = awsRes.status === 'fulfilled' ? 'success' : 'failed';
+    checkov = checkovSettled.value;
+    tfsec = tfsecSettled.value;
+    aws = awsSettled.value;
 
-    if (checkovRes.status === 'rejected') {
-      // eslint-disable-next-line no-console
-      console.error(`[orchestrate] checkov failed: ${stringifyErr(checkovRes.reason)}`);
-    }
-    if (tfsecRes.status === 'rejected') {
-      // eslint-disable-next-line no-console
-      console.error(`[orchestrate] tfsec failed: ${stringifyErr(tfsecRes.reason)}`);
-    }
-    if (awsRes.status === 'rejected') {
-      // eslint-disable-next-line no-console
-      console.error(`[orchestrate] aws-context failed: ${stringifyErr(awsRes.reason)}`);
-    }
+    cortSubStages['checkov'] = checkovSettled.status;
+    cortSubStages['tfsec'] = tfsecSettled.status;
+    cortSubStages['awsContext'] = awsSettled.status;
 
-    cortReport = aggregateFindings(checkov, tfsec, aws);
+    // Rollup computed from the three results in hand rather than by re-scanning
+    // the stringly-keyed sub-stage record.
+    cortOverall = [checkovSettled, tfsecSettled, awsSettled].every(
+      (s) => s.status === 'failed',
+    )
+      ? 'failed'
+      : 'success';
   }
-  // else: no terraform-dir — every sub-stage stays 'skipped' and cortReport is
-  // the empty AggregatedReport. Reporter still runs.
 
+  const cortReport = aggregateFindings(checkov, tfsec, aws);
   await writeFile(cortPath, JSON.stringify(cortReport, null, 2), 'utf-8');
   const cortDuration = now() - cortStart;
-  const cortOverall: StageStatus =
-    !opts.terraformDir
-      ? 'skipped'
-      : Object.values(cortSubStages).every((s) => s === 'failed')
-        ? 'failed'
-        : 'success';
   stageRecords.push({
     name: 'cort',
     status: cortOverall,
@@ -483,6 +454,28 @@ export async function orchestrate(
 
 function stringifyErr(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
+}
+
+// Collapse one settled scanner result into the only two things the Cort stage
+// needs from it — the value to aggregate and the status to report — plus the
+// error log. Producing all three from a single branch is what keeps them from
+// disagreeing.
+//
+// `label` is passed explicitly rather than derived from the sub-stage key
+// because the two differ: the AWS check is keyed 'awsContext' but has always
+// logged as 'aws-context', and that operator-facing string should not change
+// as a side effect of this refactor.
+function settle<T>(
+  result: PromiseSettledResult<T>,
+  fallback: () => T,
+  label: string,
+): { value: T; status: StageStatus } {
+  if (result.status === 'fulfilled') {
+    return { value: result.value, status: 'success' };
+  }
+  // eslint-disable-next-line no-console
+  console.error(`[orchestrate] ${label} failed: ${stringifyErr(result.reason)}`);
+  return { value: fallback(), status: 'failed' };
 }
 
 function isEcosystem(s: string): s is Ecosystem {

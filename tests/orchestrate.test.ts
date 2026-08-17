@@ -11,6 +11,7 @@ import type {
   CheckovReport,
   TfsecReport,
 } from '../src/cort/types.js';
+import { aggregateFindings } from '../src/cort/aggregateFindings.js';
 import type { PatchSession } from '../src/patcher/types.js';
 import type { LLMClient } from '../src/shared/llmClient.js';
 
@@ -252,6 +253,95 @@ describe('orchestrate — single Cort scanner fails', () => {
       });
       // At least one scanner succeeded → overall cort stage is 'success'
       expect(cortStage?.status).toBe('success');
+    } finally {
+      await cleanup();
+    }
+  });
+});
+
+describe('orchestrate — every Cort scanner fails', () => {
+  // The all-three-fail rollup had no coverage at all, which made it the one
+  // branch a refactor of this block could silently invert.
+  it('marks the cort stage failed while still running Patcher and Reporter', async () => {
+    const { dir, cleanup } = await makeTmpDir();
+    try {
+      const fakeComposePR = makeFakeComposePR();
+      const fakePatcher = makeFakeApplyPatches(happyPatchSession());
+
+      const summary = await orchestrate(baseOpts(dir, { terraformDir: '/tf' }), {
+        runHunter: makeFakeHunter([SAMPLE_MATCH]),
+        runCheckov: vi.fn().mockRejectedValue(new Error('checkov crashed')),
+        runTfsec: vi.fn().mockRejectedValue(new Error('tfsec crashed')),
+        runAwsContextChecks: vi.fn().mockRejectedValue(new Error('aws crashed')),
+        applyPatches: fakePatcher,
+        composePR: fakeComposePR,
+        llmClient: makeFakeLLMClient(),
+      });
+
+      const cortStage = summary.stages.find((s) => s.name === 'cort');
+      expect(cortStage?.status).toBe('failed');
+      expect(cortStage?.subStages).toEqual({
+        checkov: 'failed',
+        tfsec: 'failed',
+        awsContext: 'failed',
+      });
+
+      // Degradation, not abort: a totally failed Cort stage must not stop the
+      // pipeline, and the run still exits 0.
+      expect(fakePatcher).toHaveBeenCalledOnce();
+      expect(fakeComposePR).toHaveBeenCalledOnce();
+      expect(summary.finalExitCode).toBe(0);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('logs the AWS sub-stage failure under the label "aws-context", not the sub-stage key', async () => {
+    const { dir, cleanup } = await makeTmpDir();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await orchestrate(baseOpts(dir, { terraformDir: '/tf' }), {
+        runHunter: makeFakeHunter([SAMPLE_MATCH]),
+        runCheckov: vi.fn().mockRejectedValue(new Error('checkov crashed')),
+        runTfsec: vi.fn().mockRejectedValue(new Error('tfsec crashed')),
+        runAwsContextChecks: vi.fn().mockRejectedValue(new Error('aws crashed')),
+        applyPatches: makeFakeApplyPatches(happyPatchSession()),
+        composePR: makeFakeComposePR(),
+        llmClient: makeFakeLLMClient(),
+      });
+
+      const logged = errorSpy.mock.calls.map((c) => String(c[0]));
+      expect(logged).toContainEqual(expect.stringContaining('aws-context failed'));
+      expect(logged).toContainEqual(expect.stringContaining('checkov failed'));
+      expect(logged).toContainEqual(expect.stringContaining('tfsec failed'));
+    } finally {
+      errorSpy.mockRestore();
+      await cleanup();
+    }
+  });
+});
+
+describe('orchestrate — empty Cort report', () => {
+  // cort-report.json must stay byte-identical: composePR's decideMode reads
+  // albCount / nonCompliantCount / compliantCount off it, so any drift in this
+  // artefact silently flips the pipeline into a billable LLM call.
+  it('writes exactly what aggregating the three empty scanner reports produces', async () => {
+    const { dir, cleanup } = await makeTmpDir();
+    try {
+      await orchestrate(baseOpts(dir), {
+        runHunter: makeFakeHunter([SAMPLE_MATCH]),
+        applyPatches: makeFakeApplyPatches(happyPatchSession()),
+        composePR: makeFakeComposePR(),
+        llmClient: makeFakeLLMClient(),
+      });
+
+      const onDisk = await readFile(join(dir, 'cort-report.json'), 'utf-8');
+      const expected = JSON.stringify(
+        aggregateFindings(emptyCheckovReport(), emptyTfsecReport(), emptyAwsContextReport()),
+        null,
+        2,
+      );
+      expect(onDisk).toBe(expected);
     } finally {
       await cleanup();
     }
