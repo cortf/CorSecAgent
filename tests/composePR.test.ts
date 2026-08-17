@@ -55,6 +55,22 @@ const WELL_FORMED_LLM_RESPONSE = [
   'All tests passing after patch installation.',
 ].join('\n');
 
+// One inspected Fargate service. decideMode now reads `checked` directly, so a
+// test that wants "an account with N services" has to say which services —
+// which is the point: the old literals asserted three compliant services with
+// an empty `checked` array, and it was genuinely ambiguous which branch they
+// were exercising.
+function fargate(name: string, compliant = true) {
+  return {
+    serviceArn: `arn:aws:ecs:us-east-1:111111111111:service/prod/${name}`,
+    serviceName: name,
+    clusterArn: 'arn:aws:ecs:us-east-1:111111111111:cluster/prod',
+    taskDefinitionArn: `arn:aws:ecs:us-east-1:111111111111:task-definition/${name}:1`,
+    platformVersion: compliant ? 'LATEST' : '1.3.0',
+    compliant,
+  };
+}
+
 async function makeTmpOutput(): Promise<{
   outputPath: string;
   cleanup: () => Promise<void>;
@@ -76,8 +92,8 @@ describe('decideMode — template-only triggers', () => {
     const cort = {
       findings: [],
       context: {
-        alb: { albCount: 1, albArns: ['arn:x'] },
-        imdsv2: { checked: [], compliantCount: 2, nonCompliantCount: 0 },
+        alb: { albArns: ['arn:x'] },
+        imdsv2: { checked: [fargate('web'), fargate('api')] },
       },
       summary: {
         totalFindings: 0,
@@ -122,8 +138,8 @@ describe('decideMode — template-only triggers', () => {
     const cort = {
       findings: [],
       context: {
-        alb: { albCount: 0, albArns: [] },
-        imdsv2: { checked: [], compliantCount: 0, nonCompliantCount: 0 },
+        alb: { albArns: [] },
+        imdsv2: { checked: [] },
       },
       summary: {
         totalFindings: 0,
@@ -163,8 +179,8 @@ describe('decideMode — LLM-call triggers', () => {
     return {
       findings: [],
       context: {
-        alb: { albCount: 1, albArns: ['arn:x'] },
-        imdsv2: { checked: [], compliantCount: 1, nonCompliantCount: 0 },
+        alb: { albArns: ['arn:x'] },
+        imdsv2: { checked: [fargate('web')] },
       },
       summary: {
         totalFindings: 0,
@@ -259,7 +275,7 @@ describe('decideMode — LLM-call triggers', () => {
       ...cort,
       context: {
         ...cort.context,
-        imdsv2: { checked: [], compliantCount: 1, nonCompliantCount: 2 },
+        imdsv2: { checked: [fargate('web'), fargate('api', false), fargate('worker', false)] },
       },
     } as const;
     expect(__testing.decideMode(nonCompliant, passingSession())).toBe('llm');
@@ -270,8 +286,8 @@ describe('decideMode — LLM-call triggers', () => {
     const noAlbs = {
       ...cort,
       context: {
-        alb: { albCount: 0, albArns: [] as string[] },
-        imdsv2: { checked: [], compliantCount: 3, nonCompliantCount: 0 },
+        alb: { albArns: [] as string[] },
+        imdsv2: { checked: [fargate('web'), fargate('api'), fargate('worker')] },
       },
     } as const;
     expect(__testing.decideMode(noAlbs, passingSession())).toBe('llm');
@@ -415,6 +431,21 @@ describe('composePR — LLM mode (tests-failed scenario)', () => {
       // as testRun and is deliberately not a payload key.
       expect(parsed['testRun']).toBeUndefined();
       expect(call.userMessage).not.toContain('Test Files');
+
+      // The model-facing contract is still counts, even though the report no
+      // longer stores them: prompts/pr-description.md names albCount,
+      // compliantCount and nonCompliantCount, so they are derived at this
+      // boundary. cort-report-tests-failed.json has 1 ALB arn and 2 compliant
+      // services in `checked`.
+      const infra = parsed['infrastructure'] as {
+        context: {
+          alb: { albCount: number };
+          imdsv2: { compliantCount: number; nonCompliantCount: number };
+        };
+      };
+      expect(infra.context.alb.albCount).toBe(1);
+      expect(infra.context.imdsv2.compliantCount).toBe(2);
+      expect(infra.context.imdsv2.nonCompliantCount).toBe(0);
 
       // Output is the FakeLLMClient's canned response, verbatim.
       expect(md).toBe(WELL_FORMED_LLM_RESPONSE);

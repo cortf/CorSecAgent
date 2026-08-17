@@ -20,6 +20,7 @@ import {
   type AlbClient,
   type EcsClient,
 } from '../src/cort/awsContextChecks.js';
+import { imdsv2Counts } from '../src/cort/types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixtures
@@ -80,7 +81,7 @@ describe('checkAlbPresence — filtering by Type === "application"', () => {
 
     const finding = await checkAlbPresence(client);
 
-    expect(finding.albCount).toBe(2);
+    expect(finding.albArns).toHaveLength(2);
     expect(finding.albArns).toHaveLength(2);
     expect(finding.albArns.every((arn) => arn.includes(':loadbalancer/app/'))).toBe(true);
     expect(finding.albArns.some((arn) => arn.includes(':loadbalancer/net/'))).toBe(false);
@@ -88,7 +89,7 @@ describe('checkAlbPresence — filtering by Type === "application"', () => {
 });
 
 describe('checkAlbPresence — empty account', () => {
-  it('returns albCount=0 and an empty arn array when DescribeLoadBalancers returns no load balancers', async () => {
+  it('returns an empty arn array when DescribeLoadBalancers returns no load balancers', async () => {
     const client = makeClient<AlbClient>((cmd) => {
       if (cmd instanceof DescribeLoadBalancersCommand) return lbEmptyResponse;
       throw new Error('unexpected command');
@@ -96,7 +97,6 @@ describe('checkAlbPresence — empty account', () => {
 
     const finding = await checkAlbPresence(client);
 
-    expect(finding.albCount).toBe(0);
     expect(finding.albArns).toEqual([]);
   });
 });
@@ -135,7 +135,7 @@ describe('checkAlbPresence — pagination', () => {
     const finding = await checkAlbPresence(client);
 
     expect(send).toHaveBeenCalledTimes(2);
-    expect(finding.albCount).toBe(2);
+    expect(finding.albArns).toHaveLength(2);
     expect(finding.albArns).toEqual([
       'arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/page1-alb/p1',
       'arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/page2-alb/p2',
@@ -278,15 +278,18 @@ describe('checkFargateImdsv2 — mixed cluster (fixture: describe-services-mixed
     expect(spot.compliant).toBe(true);
   });
 
-  it('aggregates compliantCount and nonCompliantCount correctly across the mixed fixture (3 compliant, 1 non-compliant)', async () => {
+  it('derives 3 compliant and 1 non-compliant from checked across the mixed fixture', async () => {
     const serviceArns = (describeServicesMixed.services ?? []).map((s) => s.serviceArn!);
     const client = makeSingleClusterEcsClient(PROD_CLUSTER_ARN, serviceArns, describeServicesMixed);
 
     const report = await checkFargateImdsv2(client);
 
-    expect(report.compliantCount).toBe(3);
-    expect(report.nonCompliantCount).toBe(1);
-    expect(report.compliantCount + report.nonCompliantCount).toBe(report.checked.length);
+    // Counts are derived, so "the buckets sum to checked.length" is no longer
+    // an invariant worth asserting — it is true by construction. What is worth
+    // asserting is that the derivation reads the fixture correctly.
+    const counts = imdsv2Counts(report);
+    expect(counts.compliant).toBe(3);
+    expect(counts.nonCompliant).toBe(1);
   });
 
   it('projects serviceArn, serviceName, clusterArn, and taskDefinitionArn from the Service into the finding', async () => {
@@ -315,8 +318,7 @@ describe('checkFargateImdsv2 — empty account', () => {
     const report = await checkFargateImdsv2(client);
 
     expect(report.checked).toEqual([]);
-    expect(report.compliantCount).toBe(0);
-    expect(report.nonCompliantCount).toBe(0);
+    expect(imdsv2Counts(report)).toEqual({ compliant: 0, nonCompliant: 0 });
   });
 
   it('skips clusters that contain no services without making a DescribeServices call', async () => {
@@ -537,10 +539,9 @@ describe('runAwsContextChecks — composition', () => {
 
     const report = await runAwsContextChecks(elbClient, ecsClient);
 
-    expect(report.alb.albCount).toBe(2);
+    expect(report.alb.albArns).toHaveLength(2);
     expect(report.imdsv2.checked).toHaveLength(4);
-    expect(report.imdsv2.compliantCount).toBe(3);
-    expect(report.imdsv2.nonCompliantCount).toBe(1);
+    expect(imdsv2Counts(report.imdsv2)).toEqual({ compliant: 3, nonCompliant: 1 });
   });
 });
 

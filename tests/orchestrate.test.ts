@@ -51,8 +51,8 @@ function emptyTfsecReport(): TfsecReport {
 
 function emptyAwsContextReport(): AwsContextReport {
   return {
-    alb: { albCount: 0, albArns: [] },
-    imdsv2: { checked: [], compliantCount: 0, nonCompliantCount: 0 },
+    alb: { albArns: [] },
+    imdsv2: { checked: [] },
   };
 }
 

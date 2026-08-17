@@ -68,10 +68,7 @@ export async function checkAlbPresence(
     throw new Error(`checkAlbPresence: ALB DescribeLoadBalancers call failed: ${msg}`);
   }
 
-  return {
-    albCount: albArns.length,
-    albArns,
-  };
+  return { albArns };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -125,14 +122,9 @@ export async function checkFargateImdsv2(
     }
   }
 
-  const compliantCount = findings.filter((f) => f.compliant).length;
-  const nonCompliantCount = findings.length - compliantCount;
-
-  return {
-    checked: findings,
-    compliantCount,
-    nonCompliantCount,
-  };
+  // Counts are not stored alongside `checked` — callers that want them use
+  // imdsv2Counts(report), so the two can never disagree.
+  return { checked: findings };
 }
 
 async function listAllClusterArns(client: EcsClient): Promise<string[]> {

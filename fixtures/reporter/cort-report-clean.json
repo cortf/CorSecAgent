@@ -2,16 +2,38 @@
   "findings": [],
   "context": {
     "alb": {
-      "albCount": 2,
       "albArns": [
         "arn:aws:elasticloadbalancing:us-east-1:111111111111:loadbalancer/app/web/abc",
         "arn:aws:elasticloadbalancing:us-east-1:111111111111:loadbalancer/app/api/def"
       ]
     },
     "imdsv2": {
-      "checked": [],
-      "compliantCount": 3,
-      "nonCompliantCount": 0
+      "checked": [
+        {
+          "serviceArn": "arn:aws:ecs:us-east-1:111111111111:service/prod/web",
+          "serviceName": "web",
+          "clusterArn": "arn:aws:ecs:us-east-1:111111111111:cluster/prod",
+          "taskDefinitionArn": "arn:aws:ecs:us-east-1:111111111111:task-definition/web:1",
+          "platformVersion": "LATEST",
+          "compliant": true
+        },
+        {
+          "serviceArn": "arn:aws:ecs:us-east-1:111111111111:service/prod/api",
+          "serviceName": "api",
+          "clusterArn": "arn:aws:ecs:us-east-1:111111111111:cluster/prod",
+          "taskDefinitionArn": "arn:aws:ecs:us-east-1:111111111111:task-definition/api:2",
+          "platformVersion": "LATEST",
+          "compliant": true
+        },
+        {
+          "serviceArn": "arn:aws:ecs:us-east-1:111111111111:service/prod/worker",
+          "serviceName": "worker",
+          "clusterArn": "arn:aws:ecs:us-east-1:111111111111:cluster/prod",
+          "taskDefinitionArn": "arn:aws:ecs:us-east-1:111111111111:task-definition/worker:3",
+          "platformVersion": "LATEST",
+          "compliant": true
+        }
+      ]
     }
   },
   "summary": {

@@ -135,10 +135,7 @@ function emptyTfsecReport(): TfsecReport {
 }
 
 function emptyAwsContextReport(): AwsContextReport {
-  return {
-    alb: { albCount: 0, albArns: [] },
-    imdsv2: { checked: [], compliantCount: 0, nonCompliantCount: 0 },
-  };
+  return { alb: { albArns: [] }, imdsv2: { checked: [] } };
 }
 
 // Stand-in session persisted when the Patcher throws, so the Reporter can still

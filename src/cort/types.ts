@@ -106,8 +106,10 @@ export interface TfsecReport {
 // Result of `checkAlbPresence`. Account-level presence only for this slice —
 // a future slice may refine this to "is THIS service behind an ALB" by joining
 // against target group / listener data.
+//
+// No albCount: it was `albArns.length` stored beside `albArns`, which made
+// {albCount: 5, albArns: []} a typechecking state. Read `albArns.length`.
 export interface AlbContextFinding {
-  albCount: number;
   albArns: string[];
 }
 
@@ -140,12 +142,35 @@ export interface Imdsv2Finding {
   compliant: boolean;
 }
 
-// Top-level report produced by `checkFargateImdsv2`. Summary counts mirror
-// the partitioned counts on `checked` exactly.
+// Top-level report produced by `checkFargateImdsv2`. `checked` is the single
+// source of truth; the compliant / non-compliant split is derived on demand by
+// `imdsv2Counts` below.
+//
+// The two count fields that used to live here were the most-drifted data in
+// the repo: eight hand-written literals across fixtures and tests described
+// accounts with compliant services and an empty `checked` array —
+// {checked: [], compliantCount: 3, nonCompliantCount: 0} reads as "zero
+// services inspected, three of which were compliant". The producer always
+// derived them correctly, so every wrong value was hand-authored.
 export interface Imdsv2Report {
   checked: Imdsv2Finding[];
-  compliantCount: number;
-  nonCompliantCount: number;
+}
+
+// Derives the compliant / non-compliant split from `checked`.
+//
+// Lives here rather than in awsContextChecks.ts so the Reporter can call it
+// without importing that module's AWS SDK dependencies. This is the one value
+// export in an otherwise type-only file; co-locating it with the shape it
+// derives from is the point.
+export function imdsv2Counts(report: Imdsv2Report): {
+  compliant: number;
+  nonCompliant: number;
+} {
+  let compliant = 0;
+  for (const finding of report.checked) {
+    if (finding.compliant) compliant++;
+  }
+  return { compliant, nonCompliant: report.checked.length - compliant };
 }
 
 // Composite report produced by `runAwsContextChecks` — the two per-check

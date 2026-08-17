@@ -19,6 +19,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import type { MatchedThreat } from '../hunter/types.js';
 import type { AggregatedReport } from '../cort/types.js';
+import { imdsv2Counts } from '../cort/types.js';
 import type { PatchSession } from '../patcher/types.js';
 import type { LLMClient } from '../shared/llmClient.js';
 import { AnthropicLLMClient } from '../shared/llmClient.js';
@@ -174,17 +175,19 @@ function decideMode(
   patchSession: PatchSession,
 ): ReporterMode {
   if (cortReport.findings.length > 0) return 'llm';
-  if (cortReport.context.imdsv2.nonCompliantCount > 0) return 'llm';
+  if (imdsv2Counts(cortReport.context.imdsv2).nonCompliant > 0) return 'llm';
 
   // ALB context is only meaningful when there's deployed compute. If the
   // account has any Fargate services AND zero ALBs, that is a missing
   // hardening signal worth narrating. Empty accounts (no services AND
   // no ALBs) stay in template mode.
-  const hasFargateServices =
-    cortReport.context.imdsv2.compliantCount +
-      cortReport.context.imdsv2.nonCompliantCount >
-    0;
-  if (hasFargateServices && cortReport.context.alb.albCount === 0) {
+  //
+  // "Any Fargate services" is `checked.length > 0` directly. It used to be
+  // reconstructed as compliantCount + nonCompliantCount > 0 — the same
+  // question asked the long way round, via two stored fields that could (and
+  // in every committed fixture did) disagree with `checked`.
+  const hasFargateServices = cortReport.context.imdsv2.checked.length > 0;
+  if (hasFargateServices && cortReport.context.alb.albArns.length === 0) {
     return 'llm';
   }
 
@@ -203,6 +206,7 @@ async function composeViaLLM(
   cortReport: AggregatedReport,
   patchSession: PatchSession,
 ): Promise<string> {
+  const imdsv2 = imdsv2Counts(cortReport.context.imdsv2);
   const payload: ReporterPayload = {
     vulnerabilities: matches.map((m) => ({
       ghsaId: m.ghsaId,
@@ -219,11 +223,14 @@ async function composeViaLLM(
         description: f.description,
         sources: f.sources.map((s) => ({ scanner: s.scanner, ruleId: s.ruleId })),
       })),
+      // The model-facing contract still speaks in counts — prompts/pr-description.md
+      // documents albCount / compliantCount / nonCompliantCount by name — so
+      // they are derived here, at the boundary, rather than stored upstream.
       context: {
-        alb: { albCount: cortReport.context.alb.albCount },
+        alb: { albCount: cortReport.context.alb.albArns.length },
         imdsv2: {
-          compliantCount: cortReport.context.imdsv2.compliantCount,
-          nonCompliantCount: cortReport.context.imdsv2.nonCompliantCount,
+          compliantCount: imdsv2.compliant,
+          nonCompliantCount: imdsv2.nonCompliant,
         },
       },
     },
